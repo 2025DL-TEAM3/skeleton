@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
     val_dataset = ARCValidationDataset(
         dataset_path=cfg.dataset_dir,
         num_train_examples_per_normal_task=cfg.dataset.num_train_examples_per_task,
-        num_datapoints_per_task=cfg.dataset.num_steps_per_task,
+        num_datapoints_per_task=cfg.dataset.num_datapoints_per_task,
         val_ratio=cfg.dataset.val_ratio,
     )
     msg.good(f"Validation dataset size: {len(val_dataset)}")
@@ -48,7 +48,7 @@ def main(cfg: DictConfig):
         train_dataset = ARCTrainDataset(
             dataset_path=cfg.dataset_dir,
             num_train_examples_per_normal_task=cfg.dataset.num_train_examples_per_task,
-            num_datapoints_per_task=cfg.dataset.num_steps_per_task,
+            num_datapoints_per_task=cfg.dataset.num_datapoints_per_task,
         )
         msg.good(f"Train dataset size: {len(train_dataset)}")
         return train_dataset

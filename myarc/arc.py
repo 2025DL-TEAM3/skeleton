@@ -26,37 +26,52 @@ import torch.nn.functional as F
 from transformers.trainer import seed_worker
 
 from .arc_utils import format_prompt_messages
+from . import arc_utils
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
 
-class BatchSamplingSFTTrainer(SFTTrainer):
+class ARCSFTTrainer(SFTTrainer):
     def __init__(
         self,
         model: PreTrainedModel,
-        train_dataset_builder: Callable[[], ARCTrainDataset] = None,
+        train_dataset_builder: Callable[[], ARCTrainDataset],
         eval_dataset: ARCValidationDataset = None,
         processing_class: PreTrainedTokenizer = None,
         args: Optional[Union[SFTConfig, TrainingArguments]] = None,
         peft_config: Optional[PeftConfig] = None,
+        use_task_batch_sampler: bool = True,
     ):    
-        args.dataset_kwargs = {
-            'skip_prepare_dataset': True, # Customize dataset
-        }
+        # args.dataset_kwargs = {
+        #     'skip_prepare_dataset': True, # Customize dataset
+        # }
+        train_dataset = train_dataset_builder()
+        print("Train dataset loaded.")
+        hf_dataset = HFDataset.from_list([
+            datapoint for datapoint in train_dataset
+        ])
+        print(hf_dataset[0])
         super().__init__(
             model=model,
             processing_class=processing_class,
-            train_dataset=None, # Set to None, will be set in get_train_dataloader
+            # TODO: set to None, will be set in get_train_dataloader
+            # for now, just set to huggingface dataset
+            train_dataset=hf_dataset, 
             eval_dataset=eval_dataset,
             args=args,
             peft_config=peft_config,
         )
         self.train_dataset_builder = train_dataset_builder
+        self.use_task_batch_sampler = use_task_batch_sampler
     
     def get_train_dataloader(self) -> DataLoader:
+        if not self.use_task_batch_sampler:
+            return super().get_train_dataloader()
+        
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        train_dataset = self.train_dataset_builder()
+        # train_dataset = self.train_dataset_builder()
+        train_dataset = self.train_dataset
         data_collator = self.data_collator
 
         if isinstance(train_dataset, datasets.Dataset):
@@ -81,7 +96,7 @@ class BatchSamplingSFTTrainer(SFTTrainer):
                 dataset=train_dataset,
                 batch_size=self._train_batch_size,
             )
-
+        print(f"Dataloader loaded with {len(train_dataset)} samples.")
         dataloader = DataLoader(train_dataset, **dataloader_params)
         return self.accelerator.prepare(dataloader)
 
@@ -239,13 +254,14 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
 
-        trainer = BatchSamplingSFTTrainer(
+        trainer = ARCSFTTrainer(
             model=self.base_model,
             processing_class=self.tokenizer,
             train_dataset_builder=train_dataset_builder,
             eval_dataset=eval_dataset,
             args=training_args,
             peft_config=self.peft_config,
+            use_task_batch_sampler=use_task_batch_sampler,
         )
         
         start_time = time.time()
