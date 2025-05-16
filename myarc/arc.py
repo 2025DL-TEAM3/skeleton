@@ -3,7 +3,7 @@ import os, glob, json, time, random
 from trl import SFTTrainer, SFTConfig
 from transformers import GenerationConfig, TrainingArguments
 import torch
-from typing import List, Union, Literal, Any, TypedDict, Callable
+from typing import List, Union, Literal, Any, TypedDict, Callable, Optional
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, Dataset as HFDataset
@@ -30,11 +30,33 @@ from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
 
 class BatchSamplingSFTTrainer(SFTTrainer):
+    def __init__(
+        self,
+        model: PreTrainedModel,
+        train_dataset_builder: Callable[[], ARCTrainDataset] = None,
+        eval_dataset: ARCValidationDataset = None,
+        processing_class: PreTrainedTokenizer = None,
+        args: Optional[Union[SFTConfig, TrainingArguments]] = None,
+        peft_config: Optional[PeftConfig] = None,
+    ):    
+        args.dataset_kwargs = {
+            'skip_prepare_dataset': True, # Customize dataset
+        }
+        super().__init__(
+            model=model,
+            processing_class=processing_class,
+            train_dataset=None, # Set to None, will be set in get_train_dataloader
+            eval_dataset=eval_dataset,
+            args=args,
+            peft_config=peft_config,
+        )
+        self.train_dataset_builder = train_dataset_builder
+    
     def get_train_dataloader(self) -> DataLoader:
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
 
-        train_dataset = self.train_dataset
+        train_dataset = self.train_dataset_builder()
         data_collator = self.data_collator
 
         if isinstance(train_dataset, datasets.Dataset):
@@ -171,8 +193,8 @@ class ARCSolver:
         self, 
         *,
         # train_dataset: ARCTrainDataset,
-        train_dataset_builder: Callable[[], HFDataset],
-        eval_dataset: HFDataset = None,
+        train_dataset_builder: Callable[[], ARCTrainDataset],
+        eval_dataset: ARCValidationDataset = None,
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
@@ -217,11 +239,10 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
 
-        trainer_class = BatchSamplingSFTTrainer if use_task_batch_sampler else SFTTrainer
-        trainer = trainer_class(
+        trainer = BatchSamplingSFTTrainer(
             model=self.base_model,
             processing_class=self.tokenizer,
-            train_dataset=train_dataset,
+            train_dataset_builder=train_dataset_builder,
             eval_dataset=eval_dataset,
             args=training_args,
             peft_config=self.peft_config,
