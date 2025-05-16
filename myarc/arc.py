@@ -3,7 +3,7 @@ import os, glob, json, time, random
 from trl import SFTTrainer, SFTConfig
 from transformers import GenerationConfig, TrainingArguments
 import torch
-from typing import List, Union, Literal, Any, TypedDict
+from typing import List, Union, Literal, Any, TypedDict, Callable
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, Dataset as HFDataset
@@ -170,8 +170,9 @@ class ARCSolver:
     def train(
         self, 
         *,
-        train_dataset: ARCTrainDataset,
-        eval_dataset: ARCValidationDataset = None,
+        # train_dataset: ARCTrainDataset,
+        train_dataset_builder: Callable[[], HFDataset],
+        eval_dataset: HFDataset = None,
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
