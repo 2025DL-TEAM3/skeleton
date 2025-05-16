@@ -6,3 +6,4 @@ peft
 matplotlib
 scikit-learn
 bitsandbytes
+wasabi

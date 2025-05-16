@@ -39,7 +39,8 @@ class ARCSolver:
         lora_rank: int = 8,
     ):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        
+        self.model_id = model_id
+
         if train_artifacts_dir is not None:
             self.train_artifacts_dir = train_artifacts_dir
         else:
@@ -150,8 +151,7 @@ class ARCSolver:
         Train a model with train_dataset.
         """
         os.makedirs(self.checkpoint_save_path, exist_ok=True)
-        os.makedirs(os.path.join(self.checkpoint_save_path, "logs"), exist_ok=True)
-        os.makedirs(os.path.join(self.checkpoint_save_path, "final"), exist_ok=True)
+        os.makedirs(self.logging_save_path, exist_ok=True)
 
         training_args = SFTConfig(
             output_dir=self.checkpoint_save_path,

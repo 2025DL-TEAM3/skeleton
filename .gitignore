@@ -1,11 +1,8 @@
 __pycache__
-artifacts/*
-*train*.txt
+artifacts/
+evaluation/
+outputs/
 !requirements.txt
-results/
-logs/
-
-*.ipynb
-reasoning_summary_results/
+artifacts/requirements.txt
 
 .env

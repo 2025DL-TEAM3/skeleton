@@ -5,8 +5,8 @@ from . import arc_utils
 from .datatypes import *
 
 def build_hf_dataset(
-    dataset_path: str, 
-    reasoning_task_path: str,
+    dataset_path: str | None = None,
+    reasoning_task_path: str | None = None,
     num_train_examples_per_normal_task: int = 3,
     num_steps_per_task: int = 50,
 ) -> HFDataset:

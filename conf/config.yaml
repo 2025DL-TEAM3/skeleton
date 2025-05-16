@@ -1,6 +1,9 @@
 defaults:
+  - model
   - dataset
   - train
+  - evaluate
+  - predict
   - _self_
 
 # Define the root workspace directory
@@ -9,13 +12,12 @@ workspace: /home/top321902/code/intro_dl/term_project
 cache_dir: null
 
 # Paths based on workspace
-dataset: ${workspace}/dataset
+dataset_dir: ${workspace}/dataset
 artifacts_dir: ${workspace}/skeleton/artifacts
 evaluation_dir: ${workspace}/skeleton/evaluation
 
-# name of the training e.g. train-qwen4b-rank8
-# all artifacts from this train will be saved in ${artifacts_dir}/${train_name}
-# if not set, train_name will be `train-<timestamp>`
-train_name: null 
-model_id: Qwen3/Qwen3-4B
+# name of the training e.g. qwen4b-rank8
+# all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}
+# if not set, artifact_name will be `train-<timestamp>`
+artifact_name: train-test 
 

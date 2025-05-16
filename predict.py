@@ -87,7 +87,7 @@ def visualize_example(task_id, test_input, ground_truth, prediction):
     plt.close()
 
 def evaluate(cfg: DictConfig):
-    train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.train_name)
+    train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
 
     solver = ARCSolver(
         # token=args.token, # TODO
@@ -99,7 +99,7 @@ def evaluate(cfg: DictConfig):
         enable_thinking=cfg.predict.enable_thinking,
     )
     
-    all_tasks = arc_utils.load_json_normal_tasks(cfg.dataset)
+    all_tasks = arc_utils.load_json_normal_tasks(cfg.dataset_dir)
     
     random.seed(42)
     
@@ -178,7 +178,7 @@ def evaluate(cfg: DictConfig):
         print(f"Average Cell Accuracy: {avg_cell_accuracy:.4f}")
         
         os.makedirs(cfg.evaluation_dir, exist_ok=True)
-        with open(f"{cfg.evaluation_dir}/result-{cfg.train_name}.json", "w") as f:
+        with open(f"{cfg.evaluation_dir}/result-{cfg.artifact_name}.json", "w") as f:
             json.dump({
                 "model_checkpoint": cfg.predict.checkpoint_name,
                 "num_examples": len(results),
@@ -188,7 +188,7 @@ def evaluate(cfg: DictConfig):
                 "results": results
             }, f, indent=4)
         
-        print(f"Results saved to {cfg.evaluation_dir}/result-{cfg.train_name}.json")
+        print(f"Results saved to {cfg.evaluation_dir}/result-{cfg.artifact_name}.json")
     else:
         print("No valid results to save.")
         
@@ -197,8 +197,8 @@ def main(cfg: DictConfig):
     print("--- Hydra Config ---")
     print(OmegaConf.to_yaml(cfg))
 
-    if not cfg.train_name:
-        raise ValueError("train_name must be specified ot predict")
+    if not cfg.artifact_name:
+        raise ValueError("artifact_name must be specified ot predict")
 
     evaluate(cfg)
 
