@@ -4,5 +4,6 @@ evaluation/
 outputs/
 !requirements.txt
 artifacts/requirements.txt
+*log*.txt
 
 .env

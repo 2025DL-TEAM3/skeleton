@@ -1,3 +1,6 @@
+# Intro to Deep Learning Term Project
+Team 03
+
 ## 1. Installation
 
 ```bash

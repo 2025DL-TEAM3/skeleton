@@ -12,8 +12,8 @@ def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
 
     os.makedirs(cfg.artifacts_dir, exist_ok=True)
-    if cfg.train_name is not None:
-        train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.train_name)
+    if cfg.artifact_name is not None:
+        train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
     else:
         now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
         train_artifacts_dir = os.path.join(cfg.artifacts_dir, f"train-{now}")
