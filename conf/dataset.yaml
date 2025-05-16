@@ -1,4 +1,4 @@
 dataset:
   num_train_examples_per_task: 3
-  num_steps_per_task: 2
+  num_datapoints_per_task: 2
   val_ratio: 0.1

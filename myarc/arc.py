@@ -8,7 +8,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from datasets import load_dataset, Dataset as HFDataset
 from pprint import pprint
-
+import datasets
 
 from transformers import (
     AutoModelForCausalLM,
@@ -23,9 +23,45 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 from torch.amp import autocast, GradScaler
 import torch.nn.functional as F
+from transformers.trainer import seed_worker
 
 from .arc_utils import format_prompt_messages
 from .datatypes import *
+from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
+
+class BatchSamplingSFTTrainer(SFTTrainer):
+    def get_train_dataloader(self) -> DataLoader:
+        if self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
+
+        train_dataset = self.train_dataset
+        data_collator = self.data_collator
+
+        if isinstance(train_dataset, datasets.Dataset):
+            train_dataset = self._remove_unused_columns(train_dataset, description="training")
+        else:
+            data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
+
+        dataloader_params = {
+            # Removed "batch_size" because we use batch_sampler below
+            "collate_fn": data_collator,
+            "num_workers": self.args.dataloader_num_workers,
+            "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
+        }
+
+        if not isinstance(train_dataset, torch.utils.data.IterableDataset):
+            dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            dataloader_params["worker_init_fn"] = seed_worker
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+
+            dataloader_params["batch_sampler"] = TaskBatchSampler(
+                dataset=train_dataset,
+                batch_size=self._train_batch_size,
+            )
+
+        dataloader = DataLoader(train_dataset, **dataloader_params)
+        return self.accelerator.prepare(dataloader)
 
 class ARCSolver:
     def __init__(
@@ -134,12 +170,13 @@ class ARCSolver:
     def train(
         self, 
         *,
-        train_dataset: HFDataset,
-        eval_dataset: HFDataset = None,
+        train_dataset: ARCTrainDataset,
+        eval_dataset: ARCValidationDataset = None,
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
         batch_size: int = 2,
+        use_task_batch_sampler: bool = True,
         warmup_ratio: float = 0.03,
         resume_from_checkpoint: str | None = None,
         optimizer: str = "adamw",
@@ -179,8 +216,8 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
 
-        # Note: should not attach eos, since the model is trained with ChatML-style prompts
-        trainer = SFTTrainer(
+        trainer_class = BatchSamplingSFTTrainer if use_task_batch_sampler else SFTTrainer
+        trainer = trainer_class(
             model=self.base_model,
             processing_class=self.tokenizer,
             train_dataset=train_dataset,

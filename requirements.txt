@@ -7,3 +7,4 @@ matplotlib
 scikit-learn
 bitsandbytes
 wasabi
+Jinja2

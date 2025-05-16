@@ -3,21 +3,30 @@ import os, glob, json, time, random
 
 from .datatypes import *
 
-system_prompt = '''You are a puzzle solving wizard. You are given a puzzle from the abstraction and reasoning corpus developed by Francois Chollet.'''
+# system prompt
+system_prompt = (
+    "You are an expert at solving puzzles from the Abstraction and Reasoning Corpus (ARC). "
+    "From a few input/output examples, infer the transformation rule "
+    "and apply it to a new test grid."
+)
 
-# User message template is a template for creating user prompts. It includes placeholders for training data and test input data, guiding the model to learn the rule and apply it to solve the given puzzle.
-user_message_template1 = \
-'''Here are the example input and output pairs from which you should learn the underlying rule to later predict the output for the given test input:
-----------------------------------------'''
-user_message_template2 = \
-'''
-Now, solve the following puzzle based on its input grid by applying the rules you have learned from the training data.:
-----------------------------------------'''
+# user prompt 1: examples
+user_message_template1 = (
+    "Here are {n} example pair{plural}:\n"
+    "{examples}\n"
+    "Observe how each input becomes its output."
+)
 
-user_message_template3 = \
-'''
-What is the output grid? Only provide the output grid in the form as in the example input and output pairs. Do not provide any additional information:
-----------------------------------------'''
+# user prompt 2: test input
+user_message_template2 = (
+    "Now apply that rule to this test input grid:\n"
+    "{test_grid}"
+)
+
+# user prompt 3: output format
+user_message_template3 = (
+    "Only return the output grid (rows as digit sequences; each ending with a newline; no extra text or spaces):"
+)
 
 def load_json_normal_tasks(dataset_path: str) -> list[TaskDict]:
     json_file_paths = glob.glob(os.path.join(dataset_path, '*.json'))
@@ -160,22 +169,29 @@ def format_prompt_messages(datapoint: DataPointDict) -> list[ChatEntry]:
     train_examples = datapoint["train"]
     test_input = datapoint["test"][0]["input"] # TODO : for now, use only the first one
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-    ]
+    n = len(train_examples)
+    plural = 's' if n != 1 else ''
+    examples_block = ''
+    for i, ex in enumerate(train_examples, start=1):
+        examples_block += f"Example {i} Input:\n"
+        examples_block += stringify_grid(ex['input'])
+        examples_block += f"\nExample {i} Output:\n"
+        examples_block += stringify_grid(ex['output'])
+        examples_block += "\n----------------------------------------\n"
+    template1 = user_message_template1.format(n=n, plural=plural, examples=examples_block)
 
-    msg = f"{user_message_template1}\n"
-    for ex in train_examples:
-        msg += (
-            f"Input:\n{stringify_grid(ex['input'])}\n\n"
-            f"Output:\n{stringify_grid(ex['output'])}\n"
-        )
-        msg += "----------------------------------------\n"
-    
-    test_msg = (
-        f"{user_message_template2}\n"
-        f"Input:\n{stringify_grid(test_input)}\n\n"
+    test_input_block = f"Test Input:\n{stringify_grid(test_input)}"
+    template2 = user_message_template2.format(test_grid=test_input_block)
+
+    user_message = (
+        f"{template1}\n"
+        f"{template2}\n"
         f"{user_message_template3}"
     )
-    messages.append({"role": "user", "content": msg + test_msg})
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_message},
+    ]
     return messages
+
