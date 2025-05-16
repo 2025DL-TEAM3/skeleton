@@ -2,6 +2,8 @@ import argparse
 import traceback
 import os
 import numpy as np
+import hydra
+from omegaconf import DictConfig, OmegaConf
 
 import torch
 import matplotlib.pyplot as plt
@@ -12,9 +14,6 @@ import random
 
 from myarc import ARCSolver
 from myarc import arc_utils
-
-WORKSPACE = os.getenv("INTRODL2025_WORKSPACE", "/home/top321902/code/intro_dl/term_project")
-print("WORKSPACE:", WORKSPACE)
 
 def shape_accuracy(prediction, ground_truth):
     """
@@ -87,19 +86,24 @@ def visualize_example(task_id, test_input, ground_truth, prediction):
     plt.savefig(f"results/{task_id}_visualization.png")
     plt.close()
 
-def evaluate(args):
-    solver = ARCSolver(token=args.token, checkpoint_save_path=args.checkpoint_save_path)
+def evaluate(cfg: DictConfig):
+    train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.train_name)
+
+    solver = ARCSolver(
+        # token=args.token, # TODO
+        train_artifacts_dir=train_artifacts_dir,
+    )
     solver.prepare_evaluation(
-        checkpoint_name=args.checkpoint_name,
-        enable_ttt=args.enable_ttt,
-        enable_thinking=args.enable_thinking,
+        checkpoint_name=cfg.predict.checkpoint_name,
+        enable_ttt=cfg.predict.enable_ttt,
+        enable_thinking=cfg.predict.enable_thinking,
     )
     
-    all_tasks = arc_utils.load_json_normal_tasks(args.dataset)
+    all_tasks = arc_utils.load_json_normal_tasks(cfg.dataset)
     
     random.seed(42)
     
-    num_tasks_to_evaluate = min(args.num_examples, len(all_tasks))
+    num_tasks_to_evaluate = min(cfg.evaluate.num_tasks_to_evaluate, len(all_tasks))
     print(f"Evaluating {num_tasks_to_evaluate} examples...")
     
     selected_tasks = random.sample(all_tasks, num_tasks_to_evaluate)
@@ -155,7 +159,7 @@ def evaluate(args):
             print(f"Ground Truth Shape: {result['ground_truth_shape']}")
             print(f"Prediction Shape: {result['prediction_shape']}")
             
-            if args.visualize:
+            if cfg.evaluate.visualize:
                 visualize_example(task_id, test_input, ground_truth, prediction)
         except Exception as e:
             print(f"Error processing task {task_id}: {e}")
@@ -173,10 +177,10 @@ def evaluate(args):
         print(f"Average Shape Accuracy: {avg_shape_accuracy:.4f}")
         print(f"Average Cell Accuracy: {avg_cell_accuracy:.4f}")
         
-        os.makedirs("results", exist_ok=True)
-        with open(f"{args.output_dir}/{args.output_file}", "w") as f:
+        os.makedirs(cfg.evaluation_dir, exist_ok=True)
+        with open(f"{cfg.evaluation_dir}/result-{cfg.train_name}.json", "w") as f:
             json.dump({
-                "model_checkpoint": args.checkpoint_name,
+                "model_checkpoint": cfg.predict.checkpoint_name,
                 "num_examples": len(results),
                 "average_accuracy": avg_accuracy,
                 "average_shape_accuracy": avg_shape_accuracy,
@@ -184,52 +188,19 @@ def evaluate(args):
                 "results": results
             }, f, indent=4)
         
-        print(f"Results saved to {args.output_dir}/{args.output_file}")
+        print(f"Results saved to {cfg.evaluation_dir}/result-{cfg.train_name}.json")
     else:
         print("No valid results to save.")
-    
-def print_args(args):
-    print("--- Arguments ---")
-    print(f"Token: {args.token}")
-    print(f"Dataset Path: {args.dataset}")
-    print(f"Number of examples: {args.num_examples}")
-    print(f"Visualize: {args.visualize}")
-    print(f"Checkpoint save path: {args.checkpoint_save_path}")
-    print(f"Checkpoint name: {args.checkpoint_name}")
-    print(f"Output directory: {args.output_dir}")
-    print(f"Output file: {args.output_file}")
-    print(f"Enable TTT: {args.enable_ttt}")
-    print(f"Enable reasoning: {args.enable_thinking}")
         
-def main():
-    parser = argparse.ArgumentParser(description='Evaluate ARCSolver on ARC dataset')
-    parser.add_argument('--token', type=str, default=None, help='HuggingFace token')
-    parser.add_argument('--dataset', type=str, default=f"{WORKSPACE}/dataset", 
-                        help='Dataset path')
-    parser.add_argument('--num_examples', type=int, default=50, 
-                        help='Number of examples to evaluate')
-    parser.add_argument('--visualize', action='store_true', 
-                        help='Visualize predictions')
-    parser.add_argument('--checkpoint_name', type=str, default="checkpoint-final", 
-                        help='Path to the checkpoint file')
-    parser.add_argument('--output_dir', type=str, default="results",
-                        help='Directory to save the results')
-    parser.add_argument('--output_file', type=str, default="evaluation_results.json",
-                        help='File name to save the results')
-    parser.add_argument('--enable_ttt', action='store_true',
-                        help='Enable TTT (Teacher-Student Transfer)')
-    parser.add_argument("--enable_thinking", action="store_true",
-                        help="Enable reasoning (thinking) in the model")
-    args = parser.parse_args()
-    
-    parent_dir = os.path.dirname(args.checkpoint_name)
-    checkpoint_name = os.path.basename(args.checkpoint_name)
-    checkpoint_save_path = os.path.join(WORKSPACE, "skeleton", "artifacts", parent_dir)
-    args.checkpoint_save_path = checkpoint_save_path
-    args.checkpoint_name = checkpoint_name
+@hydra.main(config_path="conf", config_name="config", version_base="1.3")
+def main(cfg: DictConfig):
+    print("--- Hydra Config ---")
+    print(OmegaConf.to_yaml(cfg))
 
-    print_args(args)
-    evaluate(args)
+    if not cfg.train_name:
+        raise ValueError("train_name must be specified ot predict")
+
+    evaluate(cfg)
 
 if __name__ == "__main__":
     main()

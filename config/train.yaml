@@ -1,0 +1,13 @@
+val_ratio: 0.1
+
+num_epochs: 5
+learning_rate: 5e-5
+gradient_accumulation_steps: 4
+batch_size: 1
+warmup_ratio: 0.03
+checkpoint_path_to_resume_from: null
+
+optimizer: paged_adamw_32bit
+max_grad_norm: 0.3
+lr_scheduler_type: cosine
+fp16: true

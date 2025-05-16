@@ -7,17 +7,18 @@ from .datatypes import *
 def build_hf_dataset(
     dataset_path: str, 
     reasoning_task_path: str,
-    num_samples_per_normal_task: int = 4, # Note: reasoning tasks are already sampled with 4
-    # num_steps_per_task: int = 50, # TODO
+    num_train_examples_per_normal_task: int = 3,
+    num_steps_per_task: int = 50,
 ) -> HFDataset:
     if dataset_path is not None:
         normal_tasks = arc_utils.load_json_normal_tasks(dataset_path)
         def normal_datapoint_sampler(task: TaskDict) -> DataPointDict:
-            return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_samples_per_normal_task)
+            return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1) # 1 for test
 
         normal_datapoints = [
             normal_datapoint_sampler(task)
             for task in normal_tasks
+            for _ in range(num_steps_per_task)
         ]
     else:
         normal_datapoints = []

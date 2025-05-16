@@ -8,7 +8,7 @@ hf_dataset = build_hf_dataset(
     # dataset_path="../dataset",
     dataset_path=None,
     reasoning_task_path="reasoning_summary_results_backup",
-    num_samples_per_normal_task=4,
+    num_train_examples_per_normal_task=4,
 )
 
 hf_dataset_splitted = hf_dataset.train_test_split(test_size=0.1)

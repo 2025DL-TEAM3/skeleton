@@ -1,0 +1,4 @@
+# will be loaded from ${workspace}/skeleton/artifacts/${train_name}/${checkpoint_name}
+checkpoint_name: "checkpoint-final"
+enable_ttt: false
+enable_thinking: false

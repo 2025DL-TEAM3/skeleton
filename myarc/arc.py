@@ -30,19 +30,22 @@ from .datatypes import *
 class ARCSolver:
     def __init__(
         self, 
-        token=None,
-        checkpoint_save_path=None,
-        enable_gradient_checkpointing=False,
-        sep_str="\n",
+        token: str | None = None,
+        model_id: str = "Qwen/Qwen3-4B",
+        train_artifacts_dir: str | None = None,
+        enable_gradient_checkpointing: bool =False,
+        sep_str: str = "\n",
+        cache_dir: str | None = None,
+        lora_rank: int = 8,
     ):
-        """
-        Args:
-            token (str): a huggingface token for restricted models such as llama3
-        """
-        model_id = "Qwen/Qwen3-4B"
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
-        self.checkpoint_save_path = checkpoint_save_path if checkpoint_save_path else "artifacts"
+        if train_artifacts_dir is not None:
+            self.train_artifacts_dir = train_artifacts_dir
+        else:
+            self.train_artifacts_dir = os.path.join("artifacts", "train-default")
+        self.checkpoint_save_path = os.path.join(self.train_artifacts_dir, "checkpoints")
+        self.logging_save_path = os.path.join(self.train_artifacts_dir, "logs")
 
         # Configure the BitsAndBytes settings for 4-bit quantization to reduce memory usage
         bnb_config = BitsAndBytesConfig(
@@ -62,8 +65,7 @@ class ARCSolver:
             "token": token,
             "device_map": "auto",  # Automatically map the model to available devices
         }
-        cache_dir = os.getenv("TRANSFORMERS_CACHE")
-        if cache_dir:
+        if cache_dir is not None:
             print(f"Using cache dir: {cache_dir}")
             model_args["cache_dir"] = cache_dir
         else:
@@ -75,7 +77,7 @@ class ARCSolver:
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
-            r=8, 
+            r=lora_rank, 
             lora_alpha=32,  
             lora_dropout=0.1,
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
@@ -111,41 +113,26 @@ class ARCSolver:
         
         
     def parse_grid(self, ids: List[int]) -> Grid:
-        """
-        Parse LLM generated sequence into ARC grid format
-
-        Args:
-            ids (List[int]): LLM generated token list
-
-        Returns:
-            grid (Grid): parsed 2D grid
-        """
-        # grid = []
-        # row = []
-        # inv_map = {k: i for i, k in enumerate(self.pixel_ids)}
+        grid = []
+        row = []
+        inv_map = {k: i for i, k in enumerate(self.pixel_ids)}
         
-        # for idx in ids:
-        #     if idx == self.sep_token_id:
-        #         if len(row) > 0:
-        #             grid.append(row.copy())
-        #             row.clear()
-        #     else:
-        #         if idx == self.tokenizer.eos_token_id:
-        #             break
-        #         row.append(inv_map.get(idx, 0))
-        # if len(row) > 0:
-        #     grid.append(row)
-        # return grid
-        decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
-        decoded = decoded.strip().split(self.sep_str)
-        grid = [
-            list(map(int, list(row.strip())))
-            for row in decoded
-        ]
+        for idx in ids:
+            if idx == self.sep_token_id:
+                if len(row) > 0:
+                    grid.append(row.copy())
+                    row.clear()
+            else:
+                if idx == self.tokenizer.eos_token_id:
+                    break
+                row.append(inv_map.get(idx, 0))
+        if len(row) > 0:
+            grid.append(row)
         return grid
 
     def train(
         self, 
+        *,
         train_dataset: HFDataset,
         eval_dataset: HFDataset = None,
         num_epochs: int = 5,
@@ -153,7 +140,11 @@ class ARCSolver:
         gradient_accumulation_steps: int = 4,
         batch_size: int = 2,
         warmup_ratio: float = 0.03,
-        checkpoint_name_to_resume_from: str = None,
+        resume_from_checkpoint: str | None = None,
+        optimizer: str = "adamw",
+        max_grad_norm: float = 0.3,
+        lr_scheduler_type: str = "linear",
+        fp16: bool = True,
     ):
         """
         Train a model with train_dataset.
@@ -164,24 +155,25 @@ class ARCSolver:
 
         training_args = SFTConfig(
             output_dir=self.checkpoint_save_path,
+            resume_from_checkpoint=resume_from_checkpoint,
+
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_train_epochs=num_epochs,
             
-            # eval_strategy="epoch",
-            # logging_dir=os.path.join(self.checkpoint_save_path, "logs"),
-            # logging_strategy="steps",
-            # logging_steps=10,
+            eval_strategy="steps",
+            logging_dir=self.logging_save_path,
+            logging_steps=10,
             save_strategy="epoch",
-            save_total_limit=3,
+            save_total_limit=5,
                                 
             learning_rate=learning_rate,
-            optim="paged_adamw_32bit",
-            max_grad_norm=0.3,
+            optim=optimizer,
+            max_grad_norm=max_grad_norm,
             warmup_ratio=warmup_ratio,
-            lr_scheduler_type="cosine",
+            lr_scheduler_type=lr_scheduler_type,
             
-            fp16=True,
+            fp16=fp16,
             
             max_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
@@ -199,77 +191,21 @@ class ARCSolver:
         
         start_time = time.time()
         trainer.train()
-        trainer.save_model(os.path.join(self.checkpoint_save_path, "final"))
-        self.tokenizer.save_pretrained(os.path.join(self.checkpoint_save_path, "final"))
+        trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
+        self.tokenizer.save_pretrained(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
 
         end_time = time.time()
         print(f"Training completed in {end_time - start_time:.2f} seconds")
-        
-        # final_merged_model = trainer.model.merge_and_unload()
-        # final_merged_model.save_pretrained(os.path.join(self.checkpoint_save_path, "final-merged"))
-        # self.tokenizer.save_pretrained(os.path.join(self.checkpoint_save_path, "final-merged"))
-    
-    # def test_time_training(self, examples: List[ExampleDict], num_epochs: int = 1):
-    #     self.model.train()
 
-    #     optimizer = AdamW(self.model.parameters(), lr=5e-5)
-        
-    #     original_examples = examples.copy()
-        
-    #     for epoch in range(num_epochs):
-    #         running = 0.0
-    #         for i, curernt_train_on_example in enumerate(original_examples):
-    #             few_shot_examples = [
-    #                 ex for idx, ex in enumerate(original_examples) if idx != i
-    #             ]
-                                
-    #             input_ids, target_ids = train_test_example_to_input_target_ids(
-    #                 few_shot_examples,
-    #                 curernt_train_on_example,
-    #                 self,
-    #                 keep_batch_dim=True,
-    #             )
-    #             input_ids = input_ids.to(self.device)
-    #             target_ids = target_ids.to(self.device)
-                
-    #             optimizer.zero_grad()
-    #             loss = self.seq2seq_loss(input_ids, target_ids)
-    #             loss.backward()
-    #             optimizer.step()
-    #             running += loss.item()
-        
-    #     self.model.eval()
-            
+    def test_time_training(self, examples: List[ExampleDict]):
+        pass
+
     def predict(
         self, 
         examples: List[ExampleDict], 
         questions_input: Grid
     ) -> Grid:
-        """
-        A single example of test data is given.
-        You should predict 2D grid (Grid or np.ndarray)
-
-        Args:
-            examples (List[ExampleDict]): List of training examples,
-                each list element is a dictionary that contains "input" and "output"
-                for example,
-                [
-                    {
-                        "input": [[1,2],[3,4]],
-                        "output": [[4,5],[6,7]],
-                    },
-                    {
-                        "input": [[0,1],[2,3]],
-                        "output": [[3,4],[5,6]],
-                    }
-                ]
-            questions_input (Grid): A 2d grid,
-                which is a input for a given question
-        Returns:
-            output (Grid): A 2d grid,
-                which is the output of given input question.
-        """
-        if hasattr(self, "enable_ttt") and self.enable_ttt:
+        if self.enable_ttt:
             self.test_time_training(examples)
         
         datapoint: DataPointDict = {
@@ -288,7 +224,6 @@ class ARCSolver:
             enable_thinking=self.enable_thinking,
             tokenize=False,
         )
-        # print(f"Prompt: {prompt}")
         
         model_inputs = self.tokenizer(prompt, add_special_tokens=False, return_tensors="pt").to(self.device)
 
@@ -300,12 +235,6 @@ class ARCSolver:
             max_new_tokens=32786 if self.enable_thinking else 150,
             do_sample=True,   
         )
-        
-        # output_ids = self.peft_model.generate(
-        #     input_ids=input_ids,
-        #     generation_config=config,
-        #     attention_mask=attn_mask,
-        # ).squeeze(0).cpu()
         
         output_ids = self.base_model.generate(
             **model_inputs,
@@ -325,7 +254,6 @@ class ARCSolver:
             
             output_ids = output_ids[think_close_idx:]
             
-
         train_input = np.array(examples[0]['input'])
         train_output = np.array(examples[0]['output'])
         test_input = np.array(questions_input)
@@ -352,8 +280,8 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_name: str = "checkpoint-final",
-        enable_ttt: bool = True,
-        enable_thinking: bool = True,
+        enable_ttt: bool = False,
+        enable_thinking: bool = False,
     ):
         """
         Load pretrained weight, make model eval mode, etc.
@@ -368,10 +296,10 @@ class ARCSolver:
                 checkpoint_path,
                 is_trainable=self.enable_ttt,
             )
-            # self.tokenizer = AutoTokenizer.from_pretrained(
-            #     checkpoint_path
-            # )
-            print("Loaded LoRA adapter")
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                checkpoint_path
+            )
+            print("Loaded LoRA adapter and tokenizer from checkpoint.")
         except Exception as e:
             print(f"No LoRA adapter found or incompatible: {e}")
             
