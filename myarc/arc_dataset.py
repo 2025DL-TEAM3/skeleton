@@ -41,12 +41,14 @@ def build_hf_dataset(
     all_datapoints = normal_datapoints + reasoning_datapoints
     random.shuffle(all_datapoints)
 
-    hf_dataset = HFDataset.from_list([
-        arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-        for datapoint in all_datapoints
-    ])
+    # hf_dataset = HFDataset.from_list([
+    #     arc_utils.datapoint_to_prompt_completion_pair(datapoint)
+    #     for datapoint in all_datapoints
+    # ])
     
-    hf_dataset = hf_dataset.shuffle()
+    # hf_dataset = hf_dataset.shuffle()
+
+    hf_dataset = HFDataset.from_list(all_datapoints) # Note: return datapoint instead of prompt-completion pair
 
     return hf_dataset
 
@@ -181,9 +183,11 @@ class ARCTrainDataset(Dataset):
             task,
             num_samples=self.num_train_examples_per_normal_task + 1, # 1 for test
         )
-        prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
+        # prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
 
-        return prompt_completion_pair
+        # return prompt_completion_pair
+
+        return datapoint
 
 class ARCValidationDataset(Dataset):
     def __init__(
@@ -207,7 +211,7 @@ class ARCValidationDataset(Dataset):
         self.max_val_tasks = int(len(normal_tasks) * self.num_datapoints_per_task * val_ratio)
         self.validation_datapoints = self._prepare_validation_datapoints(normal_tasks)
     
-    def _prepare_validation_datapoints(self, normal_tasks: list[TaskDict]) -> list[PromptCompletionPair]:
+    def _prepare_validation_datapoints(self, normal_tasks: list[TaskDict]) -> list[DataPointDict]:
         random.seed(self.seed)
         validation_datapoints = []
 
@@ -226,8 +230,9 @@ class ARCValidationDataset(Dataset):
                     task,
                     num_samples=self.num_train_examples_per_normal_task + 1, # 1 for test
                 )
-                prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-                validation_datapoints.append(prompt_completion_pair)
+                # prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
+                # validation_datapoints.append(prompt_completion_pair)
+                validation_datapoints.append(datapoint)
         
         random.seed()
 

@@ -31,7 +31,7 @@ def main(cfg: DictConfig):
         val_ratio=cfg.dataset.val_ratio,
         return_type="hf", # TODO
     )
-    msg.good(f"Validation dataset size: {len(val_dataset)}")
+    msg.good(f"Validation dataset size: {len(val_dataset)} ({100 * cfg.dataset.val_ratio:.2f}% of total)")
 
     msg.info("Initializing model...")
     model_config = OmegaConf.to_container(cfg.model, resolve=True)

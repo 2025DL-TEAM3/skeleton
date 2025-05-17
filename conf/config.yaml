@@ -19,5 +19,5 @@ evaluation_dir: ${workspace}/skeleton/evaluation
 # name of the training e.g. qwen4b-rank8
 # all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}
 # if not set, artifact_name will be `train-<timestamp>`
-artifact_name: train-dataset-migration-test
+artifact_name: train-dataset-migration-test-3
 

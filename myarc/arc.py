@@ -27,7 +27,7 @@ import torch.nn.functional as F
 from transformers.trainer import seed_worker
 
 from .arc_utils import format_prompt_messages
-from . import arc_utils
+from . import arc_utils, data_transform
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
 
@@ -36,7 +36,9 @@ class ARCSFTTrainer:
         self,
         model: PreTrainedModel | PeftModel,
         train_dataset_builder: Callable[[], HFDataset],
+        train_dataset_transform: Callable[[DataPointDict], PromptCompletionPair] = None,
         eval_dataset: HFDataset = None,
+        eval_dataset_transform: Callable[[DataPointDict], PromptCompletionPair] = None,
         processing_class: PreTrainedTokenizer = None,
         args: Optional[Union[SFTConfig, TrainingArguments]] = None,
         peft_config: Optional[PeftConfig] = None,
@@ -44,8 +46,23 @@ class ARCSFTTrainer:
     ):  
         self.model = model
         self.train_dataset_builder = train_dataset_builder
+        if train_dataset_transform is None:
+            self.train_dataset_transform = data_transform.DefaultFormatMessages()
+        else:
+            self.train_dataset_transform = train_dataset_transform
+
         self.processing_class = processing_class
+
         self.eval_dataset = eval_dataset
+        if eval_dataset is not None:
+            if eval_dataset_transform is None:
+                eval_dataset_transform = data_transform.DefaultFormatMessages()
+            self.eval_dataset = eval_dataset.map(
+                eval_dataset_transform,
+                remove_columns=eval_dataset.column_names,
+                desc="Transforming eval dataset",
+            )
+
         if args is None:
             args = SFTConfig(f"{model.config._name_or_path.split("/")[-1]}-SFT")
         self.args = args
@@ -62,6 +79,12 @@ class ARCSFTTrainer:
             msg.info(f"Epoch {epoch + 1}/{self.num_epochs}")
             epoch_start_time = time.time()
             train_dataset = self.train_dataset_builder()
+            train_dataset = train_dataset.map(
+                self.train_dataset_transform,
+                remove_columns=train_dataset.column_names,
+                desc="Transforming train dataset",
+            )
+
             training_arguments = self.prepare_training_arguments(self.args, epoch)
 
             trainer = TaskBatchSamplingSFTTrainer(
@@ -355,7 +378,9 @@ class ARCSolver:
             model=self.base_model if self.peft_model is None else self.peft_model,
             processing_class=self.tokenizer,
             train_dataset_builder=train_dataset_builder,
+            train_dataset_transform=None, # TODO
             eval_dataset=eval_dataset,
+            eval_dataset_transform=None, # TODO
             args=training_args,
             peft_config=peft_config,
             use_task_batch_sampler=use_task_batch_sampler,
