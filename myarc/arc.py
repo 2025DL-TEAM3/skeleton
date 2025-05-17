@@ -237,10 +237,10 @@ class ARCSolver:
         
         if enable_gradient_checkpointing:
             print("Enabling gradient checkpointing for memory efficiency.")
-            self.model.gradient_checkpointing_enable()
-            self.model.config.use_cache = False
-            if hasattr(self.model, "enable_input_require_grads"):
-                self.model.enable_input_require_grads()
+            self.base_model.gradient_checkpointing_enable()
+            self.base_model.config.use_cache = False
+            if hasattr(self.base_model, "enable_input_require_grads"):
+                self.base_model.enable_input_require_grads()
 
         tokenizer_args = {
             "pretrained_model_name_or_path": model_id,
