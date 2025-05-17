@@ -1,4 +1,5 @@
-import os, glob, json, time, random
+import os, glob, json, time, random, copy
+from wasabi import msg
 
 from trl import SFTTrainer, SFTConfig
 from transformers import GenerationConfig, TrainingArguments
@@ -30,12 +31,90 @@ from . import arc_utils
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
 
-class ARCSFTTrainer(SFTTrainer):
+class ARCSFTTrainer:
+    def __init__(
+        self,
+        model: PreTrainedModel | PeftModel,
+        train_dataset_builder: Callable[[], HFDataset],
+        eval_dataset: HFDataset = None,
+        processing_class: PreTrainedTokenizer = None,
+        args: Optional[Union[SFTConfig, TrainingArguments]] = None,
+        peft_config: Optional[PeftConfig] = None,
+        use_task_batch_sampler: bool = True,
+    ):  
+        self.model = model
+        self.train_dataset_builder = train_dataset_builder
+        self.processing_class = processing_class
+        self.eval_dataset = eval_dataset
+        if args is None:
+            args = SFTConfig(f"{model.config._name_or_path.split("/")[-1]}-SFT")
+        self.args = args
+        if isinstance(model, PeftModel):
+            self.peft_config = None
+        else:
+            self.peft_config = peft_config
+        self.use_task_batch_sampler = use_task_batch_sampler
+        self.num_epochs = args.num_train_epochs
+    
+    def train(self):
+        start_time = time.time()
+        for epoch in range(self.num_epochs):
+            msg.info(f"Epoch {epoch + 1}/{self.num_epochs}")
+            epoch_start_time = time.time()
+            train_dataset = self.train_dataset_builder()
+            training_arguments = self.prepare_training_arguments(self.args, epoch)
+
+            trainer = TaskBatchSamplingSFTTrainer(
+                model=self.model,
+                processing_class=self.processing_class,
+                train_dataset=train_dataset,
+                eval_dataset=self.eval_dataset,
+                args=training_arguments,
+                peft_config=self.peft_config,
+                use_task_batch_sampler=self.use_task_batch_sampler,
+            )
+
+            trainer.train()
+
+            if self.eval_dataset is not None:
+                eval_metrics = trainer.evaluate()
+                print(f"[Eval][Epoch {epoch + 1}] {eval_metrics}")
+
+                trainer.log({f"eval_epoch_{epoch + 1}/{self.num_epochs}": eval_metrics})
+
+            self.model = trainer.model
+            model_checkpoint_dir = os.path.join(
+                training_arguments.output_dir, f"checkpoint-{epoch + 1}"
+            )
+            trainer.save_model(model_checkpoint_dir)
+
+            epoch_end_time = time.time()
+            print(f"Epoch {epoch + 1} completed in {epoch_end_time - epoch_start_time:.2f} seconds")
+        
+            if epoch + 1 == self.num_epochs:
+                # save final model
+                final_model_dir = os.path.join(training_arguments.output_dir, "checkpoint-final")
+                trainer.save_model(final_model_dir)
+        
+        end_time = time.time()
+        print(f"Training completed in {end_time - start_time:.2f} seconds")
+    
+    def prepare_training_arguments(self, base_args: SFTConfig, epoch: int) -> SFTConfig:
+        args = copy.deepcopy(base_args)
+
+        args.logging_strategy = "no"
+        args.save_strategy = "no"
+        args.eval_strategy = "no"
+
+        args.num_train_epochs = 1
+        return args
+
+class TaskBatchSamplingSFTTrainer(SFTTrainer):
     def __init__(
         self,
         model: PreTrainedModel,
-        train_dataset_builder: Callable[[], ARCTrainDataset],
-        eval_dataset: ARCValidationDataset = None,
+        train_dataset: HFDataset = None,
+        eval_dataset: HFDataset = None,
         processing_class: PreTrainedTokenizer = None,
         args: Optional[Union[SFTConfig, TrainingArguments]] = None,
         peft_config: Optional[PeftConfig] = None,
@@ -44,28 +123,23 @@ class ARCSFTTrainer(SFTTrainer):
         # args.dataset_kwargs = {
         #     'skip_prepare_dataset': True, # Customize dataset
         # }
-        train_dataset = train_dataset_builder()
-        print("Train dataset loaded.")
-        hf_dataset = HFDataset.from_list([
-            datapoint for datapoint in train_dataset
-        ])
-        print(hf_dataset[0])
         super().__init__(
             model=model,
             processing_class=processing_class,
             # TODO: set to None, will be set in get_train_dataloader
             # for now, just set to huggingface dataset
-            train_dataset=hf_dataset, 
+            train_dataset=train_dataset, 
             eval_dataset=eval_dataset,
             args=args,
             peft_config=peft_config,
         )
-        self.train_dataset_builder = train_dataset_builder
         self.use_task_batch_sampler = use_task_batch_sampler
     
     def get_train_dataloader(self) -> DataLoader:
         if not self.use_task_batch_sampler:
             return super().get_train_dataloader()
+    
+        raise ValueError("TaskBatchSampler is not supported yet.")
         
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
@@ -129,7 +203,7 @@ class ARCSolver:
             bnb_4bit_compute_dtype=torch.float16,  # Set the computation data type
         )
         
-        model_args = {
+        self.model_args = {
             "pretrained_model_name_or_path": model_id,
             "trust_remote_code": True,  # Allow the model to use custom code from the repository
             "quantization_config": bnb_config,  # Apply the 4-bit quantization configuration
@@ -141,12 +215,14 @@ class ARCSolver:
         }
         if cache_dir is not None:
             print(f"Using cache dir: {cache_dir}")
-            model_args["cache_dir"] = cache_dir
+            self.model_args["cache_dir"] = cache_dir
+            self.cache_dir = cache_dir
         else:
             print("No cache dir found, using default cache location.")
+            self.cache_dir = None
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
-            **model_args,
+            **self.model_args,
         )
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
@@ -208,8 +284,8 @@ class ARCSolver:
         self, 
         *,
         # train_dataset: ARCTrainDataset,
-        train_dataset_builder: Callable[[], ARCTrainDataset],
-        eval_dataset: ARCValidationDataset = None,
+        train_dataset_builder: Callable[[], ARCTrainDataset] | Callable[[], HFDataset],
+        eval_dataset: ARCValidationDataset | HFDataset= None, # TODO
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
@@ -225,23 +301,44 @@ class ARCSolver:
         """
         Train a model with train_dataset.
         """
+        if eval_dataset is not None and not isinstance(eval_dataset, HFDataset):
+            raise ValueError("eval_dataset must be a HuggingFace dataset for now.")
+
         os.makedirs(self.checkpoint_save_path, exist_ok=True)
         os.makedirs(self.logging_save_path, exist_ok=True)
 
+        peft_config = self.peft_config
+        if resume_from_checkpoint is not None:
+            print(f"Resuming from checkpoint: {resume_from_checkpoint}")
+            is_peft_checkpoint = arc_utils.is_peft_checkpoint_path(resume_from_checkpoint)
+            if is_peft_checkpoint:
+                print(f"Loading LoRA adapter from {resume_from_checkpoint}")
+                self.peft_model = PeftModel.from_pretrained(
+                    self.base_model,
+                    resume_from_checkpoint,
+                    is_trainable=True,
+                )
+                peft_config = None # already loaded
+            else:
+                print(f"Loading model from {resume_from_checkpoint}")
+                self.base_model = AutoModelForCausalLM.from_pretrained(
+                    resume_from_checkpoint,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16,
+                )
+
         training_args = SFTConfig(
             output_dir=self.checkpoint_save_path,
-            resume_from_checkpoint=resume_from_checkpoint,
 
             per_device_train_batch_size=batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_train_epochs=num_epochs,
             
-            eval_strategy="steps",
+            eval_strategy="epoch",
             logging_dir=self.logging_save_path,
-            logging_steps=10,
             save_strategy="epoch",
-            save_total_limit=5,
-                                
+            
             learning_rate=learning_rate,
             optim=optimizer,
             max_grad_norm=max_grad_norm,
@@ -255,22 +352,17 @@ class ARCSolver:
         )
 
         trainer = ARCSFTTrainer(
-            model=self.base_model,
+            model=self.base_model if self.peft_model is None else self.peft_model,
             processing_class=self.tokenizer,
             train_dataset_builder=train_dataset_builder,
             eval_dataset=eval_dataset,
             args=training_args,
-            peft_config=self.peft_config,
+            peft_config=peft_config,
             use_task_batch_sampler=use_task_batch_sampler,
         )
         
-        start_time = time.time()
         trainer.train()
-        trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
-        self.tokenizer.save_pretrained(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
 
-        end_time = time.time()
-        print(f"Training completed in {end_time - start_time:.2f} seconds")
 
     def test_time_training(self, examples: List[ExampleDict]):
         pass

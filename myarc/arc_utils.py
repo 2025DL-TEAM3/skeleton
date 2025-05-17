@@ -195,3 +195,9 @@ def format_prompt_messages(datapoint: DataPointDict) -> list[ChatEntry]:
     ]
     return messages
 
+
+def is_peft_checkpoint_path(checkpoint_path: str) -> bool:
+    """
+    Check if the checkpoint path is a PEFT checkpoint.
+    """
+    return os.path.isfile(os.path.join(checkpoint_path, "adapter_config.json"))

@@ -5,68 +5,117 @@ from torch.utils.data import Dataset, Sampler
 from . import arc_utils
 from .datatypes import *
 
-# def build_hf_dataset(
-#     dataset_path: str | None = None,
-#     reasoning_task_path: str | None = None,
-#     num_train_examples_per_normal_task: int = 3,
-#     num_steps_per_task: int = 50,
-# ) -> HFDataset:
-#     if dataset_path is not None:
-#         normal_tasks = arc_utils.load_json_normal_tasks(dataset_path)
-#         def normal_datapoint_sampler(task: TaskDict) -> DataPointDict:
-#             return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1) # 1 for test
+def build_hf_dataset(
+    dataset_path: str | None = None,
+    reasoning_task_path: str | None = None,
+    num_train_examples_per_normal_task: int = 3,
+    num_datapoints_per_task: int = 50,
+) -> HFDataset:
+    if dataset_path is not None:
+        normal_tasks = arc_utils.load_json_normal_tasks(dataset_path)
+        def normal_datapoint_sampler(task: TaskDict) -> DataPointDict:
+            return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1) # 1 for test
 
-#         normal_datapoints = [
-#             normal_datapoint_sampler(task)
-#             for task in normal_tasks
-#             for _ in range(num_steps_per_task)
-#         ]
-#     else:
-#         normal_datapoints = []
-#     print(f"Loaded {len(normal_datapoints)} normal datapoints from {dataset_path}")
+        normal_datapoints = [
+            normal_datapoint_sampler(task)
+            for task in normal_tasks
+            for _ in range(num_datapoints_per_task)
+        ]
+    else:
+        normal_datapoints = []
+    print(f"Loaded {len(normal_datapoints)} normal datapoints from {dataset_path}")
         
-#     if reasoning_task_path is not None:
-#         reasoning_datapoints = [
-#             datapoint
-#             for task in arc_utils.load_json_reasoning_tasks(
-#                 reasoning_task_path,
-#                 ignore_wrong_teacher_output=False, # TODO
-#             )
-#             for datapoint in task["datapoints"]
-#         ]
-#     else:
-#         reasoning_datapoints = []
-#     print(f"Loaded {len(reasoning_datapoints)} reasoning datapoints from {reasoning_task_path}")
+    if reasoning_task_path is not None:
+        reasoning_datapoints = [
+            datapoint
+            for task in arc_utils.load_json_reasoning_tasks(
+                reasoning_task_path,
+                ignore_wrong_teacher_output=False, # TODO
+            )
+            for datapoint in task["datapoints"]
+        ]
+    else:
+        reasoning_datapoints = []
+    print(f"Loaded {len(reasoning_datapoints)} reasoning datapoints from {reasoning_task_path}")
 
-#     all_datapoints = normal_datapoints + reasoning_datapoints
-#     random.shuffle(all_datapoints)
+    all_datapoints = normal_datapoints + reasoning_datapoints
+    random.shuffle(all_datapoints)
 
-#     hf_dataset = HFDataset.from_list([
-#         arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-#         for datapoint in all_datapoints
-#     ])
+    hf_dataset = HFDataset.from_list([
+        arc_utils.datapoint_to_prompt_completion_pair(datapoint)
+        for datapoint in all_datapoints
+    ])
     
-#     hf_dataset = hf_dataset.shuffle()
+    hf_dataset = hf_dataset.shuffle()
 
-#     return hf_dataset
+    return hf_dataset
 
-# def build_hf_train_val_dataset(
-#     dataset_path: str | None = None,
-#     reasoning_task_path: str | None = None,
-#     num_train_examples_per_normal_task: int = 3,
-#     num_steps_per_task: int = 50,
-#     val_ratio: float = 0.1,
-# ):
-#     hf_dataset = build_hf_dataset(
-#         dataset_path=dataset_path,
-#         reasoning_task_path=reasoning_task_path,
-#         num_train_examples_per_normal_task=num_train_examples_per_normal_task,
-#         num_steps_per_task=num_steps_per_task,
-#     )
-#     splitted = hf_dataset.train_test_split(test_size=val_ratio)
-#     train_dataset = splitted["train"]
-#     val_dataset = splitted["test"]
-#     return train_dataset, val_dataset
+def build_hf_train_val_dataset(
+    dataset_path: str | None = None,
+    reasoning_task_path: str | None = None,
+    num_train_examples_per_normal_task: int = 3,
+    num_datapoints_per_task: int = 50,
+    val_ratio: float = 0.1,
+) -> tuple[HFDataset, HFDataset]:
+    hf_dataset = build_hf_dataset(
+        dataset_path=dataset_path,
+        reasoning_task_path=reasoning_task_path,
+        num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+        num_datapoints_per_task=num_datapoints_per_task,
+    )
+    splitted = hf_dataset.train_test_split(test_size=val_ratio)
+    train_dataset = splitted["train"]
+    val_dataset = splitted["test"]
+    return train_dataset, val_dataset
+
+def build_torch_train_val_dataset(
+    dataset_path: str | None = None,
+    reasoning_task_path: str | None = None,
+    num_train_examples_per_normal_task: int = 3,
+    num_datapoints_per_task_task: int = 50,
+    val_ratio: float = 0.1,
+) -> tuple["ARCTrainDataset", "ARCValidationDataset"]:
+    train_dataset = ARCTrainDataset(
+        dataset_path=dataset_path,
+        num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+        num_datapoints_per_task=num_datapoints_per_task_task,
+    )
+
+    val_dataset = ARCValidationDataset(
+        dataset_path=dataset_path,
+        num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+        num_datapoints_per_task=num_datapoints_per_task_task,
+        val_ratio=val_ratio,
+    )
+
+    return train_dataset, val_dataset
+
+def build_train_val_dataset(
+    dataset_path: str | None = None,
+    reasoning_task_path: str | None = None,
+    num_train_examples_per_normal_task: int = 3,
+    num_datapoints_per_task: int = 50,
+    val_ratio: float = 0.1,
+    return_type: Literal["pt", "hf"] = "pt",
+) -> tuple[HFDataset, HFDataset] | tuple["ARCTrainDataset", "ARCValidationDataset"]:
+    if return_type == "pt":
+        return build_torch_train_val_dataset(
+            dataset_path=dataset_path,
+            reasoning_task_path=reasoning_task_path,
+            num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+            num_datapoints_per_task_task=num_datapoints_per_task,
+            val_ratio=val_ratio,
+        )
+    elif return_type == "hf":
+        return build_hf_train_val_dataset(
+            dataset_path=dataset_path,
+            reasoning_task_path=reasoning_task_path,
+            num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+            num_datapoints_per_task=num_datapoints_per_task,
+            val_ratio=val_ratio,
+        )
+    else:
+        raise ValueError(f"Unknown return type: {return_type}")
 
 class TaskBatchSampler(Sampler):
     def __init__(self, dataset: Dataset, batch_size: int):
