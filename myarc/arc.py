@@ -1,4 +1,4 @@
-import os, glob, json, time, random, copy
+import os, glob, json, time, random, copy, gc
 from wasabi import msg
 
 from trl import SFTTrainer, SFTConfig
@@ -54,7 +54,7 @@ class ARCSFTTrainer:
         self.processing_class = processing_class
 
         self.eval_dataset = eval_dataset
-        if eval_dataset is not None:
+        if eval_dataset is not None and args.eval_strategy != "no":
             if eval_dataset_transform is None:
                 eval_dataset_transform = data_transform.DefaultFormatMessages()
             self.eval_dataset = eval_dataset.map(
@@ -118,7 +118,8 @@ class ARCSFTTrainer:
 
             training_arguments = self.prepare_training_arguments(self.args, epoch)
 
-            trainer = TaskBatchSamplingSFTTrainer(
+            # trainer = TaskBatchSamplingSFTTrainer(
+            trainer = SFTTrainer(
                 model=self.model,
                 processing_class=self.processing_class,
                 train_dataset=train_dataset,
@@ -147,6 +148,11 @@ class ARCSFTTrainer:
                 # save final model
                 final_model_dir = os.path.join(training_arguments.output_dir, "checkpoint-final")
                 trainer.save_model(final_model_dir)
+                
+            # explicit memory cleanup
+            del trainer
+            torch.cuda.empty_cache()
+            gc.collect()
         
         end_time = time.time()
         self.log(f"Training completed in {end_time - start_time:.2f} seconds", msg_type="good")
@@ -387,6 +393,7 @@ class ARCSolver:
             output_dir=self.checkpoint_save_path,
 
             per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=1,
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_train_epochs=num_epochs,
             
