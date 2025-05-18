@@ -15,9 +15,9 @@ def build_hf_dataset(
 ) -> HFDataset:
     global NORMAL_TASKS
     if dataset_path is not None:
-        if not NORMAL_TASKS:
+        if len(NORMAL_TASKS) == 0:
             NORMAL_TASKS = arc_utils.load_json_normal_tasks(dataset_path)
-        normal_tasks = NORMAL_TASKS
+        normal_tasks = NORMAL_TASKS.copy()
         def normal_datapoint_sampler(task: TaskDict) -> DataPointDict:
             return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1) # 1 for test
 

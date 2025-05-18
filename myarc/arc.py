@@ -62,6 +62,9 @@ class ARCSFTTrainer:
                 remove_columns=eval_dataset.column_names,
                 desc="Applying eval dataset transform",
             )
+        else:
+            self.eval_dataset = None
+            eval_dataset_transform = None
 
         if args is None:
             args = SFTConfig(f"{model.config._name_or_path.split('/')[-1]}-SFT")
