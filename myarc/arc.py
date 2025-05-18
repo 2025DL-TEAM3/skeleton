@@ -64,7 +64,7 @@ class ARCSFTTrainer:
             )
 
         if args is None:
-            args = SFTConfig(f"{model.config._name_or_path.split("/")[-1]}-SFT")
+            args = SFTConfig(f"{model.config._name_or_path.split('/')[-1]}-SFT")
         self.args = args
         if isinstance(model, PeftModel):
             self.peft_config = None

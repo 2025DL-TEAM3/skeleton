@@ -1,5 +1,5 @@
 train:
-  num_epochs: 1
+  num_epochs: 5
   learning_rate: 5e-5
   # learning_rate: 1e-4
   gradient_accumulation_steps: 4
