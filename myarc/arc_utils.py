@@ -4,18 +4,27 @@ import os, glob, json, time, random
 from .datatypes import *
 
 # system prompt
-system_prompt = (
-    "You are an expert at solving puzzles from the Abstraction and Reasoning Corpus (ARC). "
-    "From a few input/output examples, infer the transformation rule "
-    "and apply it to a new test grid."
-)
+system_prompt = """You are a helpful AI assistant. Your job is to solve tasks from the Abstraction and Reasoning Challenge (ARC). 
+The user will present you with sample input and output grids for each task. 
+Your job will be to understand the transformation between the input and the output and apply it to the last input grid given by the user. 
+The puzzle-like inputs and outputs present a grid where each square can be one of ten colors. A grid can be any height or width between 1x1 and 30x30.
+The background of the grid is typically colored with 0.
+The tasks from ARC are based on the following priors:
+
+- Objectness: Objects persist and cannot appear or disappear without reason. Objects can interact or not depending on the circumstances.
+- Goal-directed: Objects can be animate or inanimate. Some objects are "agents" - they have intentions and they pursue goals.
+- Numbers & counting: Objects can be counted or sorted by their shape, appearance, or movement using basic mathematics like addition, subtraction, and comparison.
+- Basic geometry & topology: Objects can be shapes like rectangles, triangles, and circles which can be mirrored, rotated, translated, deformed, combined, repeated, etc. Differences in distances can be detected.
+
+The transformations between input and output should be based on these priors.
+"""
 
 # user prompt 1: examples
-user_message_template1 = (
-    "Here are {n} example pair{plural}:\n"
-    "{examples}\n"
-    "Observe how each input becomes its output."
-)
+user_message_template1 = """Let's see if you can solve this simple ARC task. These are some input-output grid examples that define the task.
+There are {n} example{plural} in total. Here they are:
+
+{examples}
+"""
 
 # user prompt 2: test input
 user_message_template2 = (
@@ -88,7 +97,6 @@ def load_json_reasoning_tasks(
                 reasoning_datapoint = {
                     **datapoint,
                     "reasoning": [reasoning],
-                    "task": task_id,
                 }
 
                 if not correct:
@@ -130,7 +138,6 @@ def sample_datapoints_from_normal_task(
     test_example = sampled_examples[num_samples - 1]
 
     return {
-        "task": task["task_id"],
         "train": train_examples,
         "test": [test_example],
     }
@@ -201,3 +208,13 @@ def is_peft_checkpoint_path(checkpoint_path: str) -> bool:
     Check if the checkpoint path is a PEFT checkpoint.
     """
     return os.path.isfile(os.path.join(checkpoint_path, "adapter_config.json"))
+
+def create_n_minus_1_dataset(examples: List[ExampleDict]) -> List[DataPointDict]:
+    new_dataset = []
+    for i in range(len(examples)):
+        new_example = {
+            "train": examples[:i] + examples[i+1:],
+            "test": [examples[i]],
+        }
+        new_dataset.append(new_example)
+    return new_dataset

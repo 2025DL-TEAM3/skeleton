@@ -12,7 +12,6 @@ class TestExampleDict(TypedDict):
     
 
 class DataPointDict(TypedDict):
-    task: str
     train: List[ExampleDict]
     test: List[ExampleDict]
     

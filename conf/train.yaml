@@ -1,13 +1,14 @@
 train:
-  num_epochs: 2
+  num_epochs: 1
   learning_rate: 5e-5
+  # learning_rate: 1e-4
   gradient_accumulation_steps: 4
   batch_size: 1
   use_task_batch_sampler: false
-  warmup_ratio: 0.03
+  warmup_ratio: 0.05
   resume_from_checkpoint: null
 
-  optimizer: paged_adamw_32bit
-  max_grad_norm: 0.3
-  lr_scheduler_type: cosine
+  optimizer: paged_adamw_8bit
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
   fp16: true

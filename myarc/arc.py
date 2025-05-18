@@ -60,7 +60,7 @@ class ARCSFTTrainer:
             self.eval_dataset = eval_dataset.map(
                 eval_dataset_transform,
                 remove_columns=eval_dataset.column_names,
-                desc="Transforming eval dataset",
+                desc="Applying eval dataset transform",
             )
 
         if args is None:
@@ -72,17 +72,42 @@ class ARCSFTTrainer:
             self.peft_config = peft_config
         self.use_task_batch_sampler = use_task_batch_sampler
         self.num_epochs = args.num_train_epochs
+        
+        # TODO: make it configurable
+        self.eval_strategy = args.eval_strategy
+        self.logging_strategy = args.logging_strategy
+        self.logging_dir = args.logging_dir
+        self.logging_file = os.path.join(self.logging_dir, "train.log")
+        self.save_strategy = args.save_strategy 
+    
+    def log(self, message: str, trainer: SFTTrainer = None, msg_type: str = "info"):
+        if self.logging_strategy == "no":
+            return
+        
+        with open(self.logging_file, "a") as f:
+            f.write(f"{message}\n")
+        try:
+            msg_fn = getattr(msg, msg_type)
+            msg_fn(message)
+        except Exception as e:
+            # fallback to msg.info
+            msg.info(message)
+        if trainer is not None:
+            trainer.log(message)
     
     def train(self):
         start_time = time.time()
         for epoch in range(self.num_epochs):
-            msg.info(f"Epoch {epoch + 1}/{self.num_epochs}")
+            self.log(f"Epoch {epoch + 1}/{self.num_epochs}")
+            
             epoch_start_time = time.time()
             train_dataset = self.train_dataset_builder()
+            
+            map_kwargs = dict()
             train_dataset = train_dataset.map(
                 self.train_dataset_transform,
                 remove_columns=train_dataset.column_names,
-                desc="Transforming train dataset",
+                desc=f"Applying train dataset transform for epoch {epoch + 1}"
             )
 
             training_arguments = self.prepare_training_arguments(self.args, epoch)
@@ -99,11 +124,9 @@ class ARCSFTTrainer:
 
             trainer.train()
 
-            if self.eval_dataset is not None:
+            if self.eval_dataset is not None and self.eval_strategy != "no":
                 eval_metrics = trainer.evaluate()
-                print(f"[Eval][Epoch {epoch + 1}] {eval_metrics}")
-
-                trainer.log({f"eval_epoch_{epoch + 1}/{self.num_epochs}": eval_metrics})
+                self.log(f"[Eval][Epoch {epoch + 1} / {self.num_epochs}] {eval_metrics}")
 
             self.model = trainer.model
             model_checkpoint_dir = os.path.join(
@@ -112,7 +135,7 @@ class ARCSFTTrainer:
             trainer.save_model(model_checkpoint_dir)
 
             epoch_end_time = time.time()
-            print(f"Epoch {epoch + 1} completed in {epoch_end_time - epoch_start_time:.2f} seconds")
+            self.log(f"Epoch {epoch + 1} completed in {epoch_end_time - epoch_start_time:.2f} seconds")
         
             if epoch + 1 == self.num_epochs:
                 # save final model
@@ -120,7 +143,7 @@ class ARCSFTTrainer:
                 trainer.save_model(final_model_dir)
         
         end_time = time.time()
-        print(f"Training completed in {end_time - start_time:.2f} seconds")
+        self.log(f"Training completed in {end_time - start_time:.2f} seconds", msg_type="good")
     
     def prepare_training_arguments(self, base_args: SFTConfig, epoch: int) -> SFTConfig:
         args = copy.deepcopy(base_args)
@@ -251,7 +274,7 @@ class ARCSolver:
             task_type="CAUSAL_LM",
             inference_mode=False,
             r=lora_rank, 
-            lora_alpha=32,  
+            lora_alpha=64,  
             lora_dropout=0.1,
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
             bias="none",
@@ -312,14 +335,17 @@ class ARCSolver:
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
-        batch_size: int = 2,
+        batch_size: int = 1,
         use_task_batch_sampler: bool = True,
-        warmup_ratio: float = 0.03,
+        warmup_ratio: float = 0.05,
         resume_from_checkpoint: str | None = None,
         optimizer: str = "adamw",
-        max_grad_norm: float = 0.3,
+        max_grad_norm: float = 1.0,
         lr_scheduler_type: str = "linear",
         fp16: bool = True,
+        eval_strategy: str = "epoch",
+        save_strategy: str = "epoch",
+        logging_strategy: str = "epoch",
     ):
         """
         Train a model with train_dataset.
@@ -358,9 +384,10 @@ class ARCSolver:
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_train_epochs=num_epochs,
             
-            eval_strategy="epoch",
+            eval_strategy=eval_strategy,
+            logging_strategy=logging_strategy,
             logging_dir=self.logging_save_path,
-            save_strategy="epoch",
+            save_strategy=save_strategy,
             
             learning_rate=learning_rate,
             optim=optimizer,
@@ -378,9 +405,9 @@ class ARCSolver:
             model=self.base_model if self.peft_model is None else self.peft_model,
             processing_class=self.tokenizer,
             train_dataset_builder=train_dataset_builder,
-            train_dataset_transform=None, # TODO
+            train_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
             eval_dataset=eval_dataset,
-            eval_dataset_transform=None, # TODO
+            eval_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
             args=training_args,
             peft_config=peft_config,
             use_task_batch_sampler=use_task_batch_sampler,
@@ -390,7 +417,28 @@ class ARCSolver:
 
 
     def test_time_training(self, examples: List[ExampleDict]):
-        pass
+        """
+        Test time training (TTT) for the model.
+        """
+        msg.info("Test time training...")
+        new_dataset = arc_utils.create_n_minus_1_dataset(examples)
+        new_hf_dataset = HFDataset.from_list(new_dataset)
+        
+        self.train(
+            train_dataset_builder=lambda: new_hf_dataset,
+            num_epochs=1,
+            batch_size=1,
+            use_task_batch_sampler=False,
+            learning_rate=8e-5,
+            gradient_accumulation_steps=4,
+            warmup_ratio=0.0,
+            fp16=True,
+            optimizer="paged_adamw_8bit",
+            eval_strategy="no",
+            save_strategy="no",
+            logging_strategy="no",
+        )
+        msg.good("Test time training completed.")
 
     def predict(
         self, 
@@ -424,7 +472,7 @@ class ARCSolver:
             # bos_token_id=self.tokenizer.bos_token_id,
             # eos_token_id=self.tokenizer.eos_token_id,
             # pad_token_id=self.tokenizer.pad_token_id,
-            max_new_tokens=32786 if self.enable_thinking else 150,
+            max_new_tokens=32786 if self.enable_thinking else 8196,
             do_sample=True,   
         )
         
