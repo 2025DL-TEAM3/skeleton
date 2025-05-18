@@ -126,7 +126,7 @@ class ARCSFTTrainer:
                 eval_dataset=self.eval_dataset,
                 args=training_arguments,
                 peft_config=self.peft_config,
-                use_task_batch_sampler=self.use_task_batch_sampler,
+                # use_task_batch_sampler=self.use_task_batch_sampler,
             )
 
             trainer.train()
@@ -423,7 +423,7 @@ class ARCSolver:
             eval_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
             args=training_args,
             peft_config=peft_config,
-            # use_task_batch_sampler=use_task_batch_sampler,
+            use_task_batch_sampler=use_task_batch_sampler,
         )
         
         trainer.train()
