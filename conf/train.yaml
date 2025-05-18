@@ -12,3 +12,5 @@ train:
   max_grad_norm: 1.0
   lr_scheduler_type: linear
   fp16: true
+
+  eval_strategy: no
