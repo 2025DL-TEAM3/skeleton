@@ -73,6 +73,11 @@ class ARCSFTTrainer:
         self.use_task_batch_sampler = use_task_batch_sampler
         self.num_epochs = args.num_train_epochs
         
+        # TODO: oom handling
+        self.train_datasets: list[HFDataset] = [
+            self.train_dataset_builder() for _ in range(self.num_epochs)
+        ]
+        
         # TODO: make it configurable
         self.eval_strategy = args.eval_strategy
         self.logging_strategy = args.logging_strategy
@@ -97,13 +102,14 @@ class ARCSFTTrainer:
     
     def train(self):
         start_time = time.time()
+        train_dataset = None
         for epoch in range(self.num_epochs):
             self.log(f"Epoch {epoch + 1}/{self.num_epochs}")
             
             epoch_start_time = time.time()
-            train_dataset = self.train_dataset_builder()
+            # train_dataset = self.train_dataset_builder()
+            train_dataset = self.train_datasets[epoch]
             
-            map_kwargs = dict()
             train_dataset = train_dataset.map(
                 self.train_dataset_transform,
                 remove_columns=train_dataset.column_names,
