@@ -153,6 +153,7 @@ class ARCSFTTrainer:
             del trainer
             torch.cuda.empty_cache()
             gc.collect()
+            print("Memory cleaned up.")
         
         end_time = time.time()
         self.log(f"Training completed in {end_time - start_time:.2f} seconds", msg_type="good")
@@ -348,6 +349,7 @@ class ARCSolver:
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
         batch_size: int = 1,
+        eval_batch_size: int = 1,
         use_task_batch_sampler: bool = True,
         warmup_ratio: float = 0.05,
         resume_from_checkpoint: str | None = None,
@@ -393,7 +395,7 @@ class ARCSolver:
             output_dir=self.checkpoint_save_path,
 
             per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=1,
+            per_device_eval_batch_size=eval_batch_size,
             gradient_accumulation_steps=gradient_accumulation_steps,
             num_train_epochs=num_epochs,
             

@@ -5,14 +5,19 @@ from torch.utils.data import Dataset, Sampler
 from . import arc_utils
 from .datatypes import *
 
+NORMAL_TASKS = []
+
 def build_hf_dataset(
     dataset_path: str | None = None,
     reasoning_task_path: str | None = None,
     num_train_examples_per_normal_task: int = 3,
     num_datapoints_per_task: int = 50,
 ) -> HFDataset:
+    global NORMAL_TASKS
     if dataset_path is not None:
-        normal_tasks = arc_utils.load_json_normal_tasks(dataset_path)
+        if not NORMAL_TASKS:
+            NORMAL_TASKS = arc_utils.load_json_normal_tasks(dataset_path)
+        normal_tasks = NORMAL_TASKS
         def normal_datapoint_sampler(task: TaskDict) -> DataPointDict:
             return arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1) # 1 for test
 
