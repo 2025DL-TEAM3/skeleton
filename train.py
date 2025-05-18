@@ -38,6 +38,7 @@ def main(cfg: DictConfig):
     solver = ARCSolver(
         # token=cfg.token, # TODO
         train_artifacts_dir=train_artifacts_dir,
+        cache_dir=cfg.cache_dir,
         **model_config,
     )
     msg.good(f"Model: {solver.model_id}")

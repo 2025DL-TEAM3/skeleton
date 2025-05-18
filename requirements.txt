@@ -8,3 +8,4 @@ scikit-learn
 bitsandbytes
 wasabi
 Jinja2
+trl
