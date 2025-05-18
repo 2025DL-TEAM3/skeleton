@@ -423,7 +423,7 @@ class ARCSolver:
             eval_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
             args=training_args,
             peft_config=peft_config,
-            use_task_batch_sampler=use_task_batch_sampler,
+            # use_task_batch_sampler=use_task_batch_sampler,
         )
         
         trainer.train()
