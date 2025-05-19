@@ -37,7 +37,7 @@ from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
 
 def tokenize(
-    example: PromptCompletionPair,
+    example: FormattedPromptCompletionPair,
     processing_class: PreTrainedTokenizer,
     add_special_tokens: bool = False,
 ) -> dict[str, Any]:
@@ -66,13 +66,16 @@ def tokenize(
 
     return processed
 
+
+    
 class ARCSFTTrainer:
     def __init__(
         self,
         model: Union[PreTrainedModel, PeftModel],
         processing_class: PreTrainedTokenizer,
-        train_dataset: HFDataset,
-        eval_dataset: HFDataset,
+        train_dataset: HFDataset | ARCTrainDataset,
+        eval_dataset: HFDataset | ARCValidationDataset,
+        augment_transform: Callable[[DataPointDict], PromptCompletionPair],
         args: SFTConfig,
         peft_config: LoraConfig,
         patience: int = 0,
@@ -84,6 +87,8 @@ class ARCSFTTrainer:
         self.args = args
         self.peft_config = peft_config
         self.patience = patience
+        
+        self.augment_transform = augment_transform
         
         self.logging_file = os.path.join(args.output_dir, "train_log.txt")
         self.metric_file = os.path.join(args.output_dir, "metrics.jsonl")
@@ -98,25 +103,43 @@ class ARCSFTTrainer:
                 )
         self.data_collator = DataCollatorForLanguageModeling(pad_token_id, completion_only_loss=True)
     
-    def _prepare_dataset(self, dataset: HFDataset, dataset_name: str) -> HFDataset:
-        column_names = next(iter(dataset)).keys()
-        dataset = dataset.map(
-            apply_chat_template,
-            fn_kwargs={"tokenizer": self.processing_class},
-            remove_columns="messages" if "messages" in column_names else None,
-            desc=f"Applying chat template to {dataset_name}",
-        )
-        
-        dataset = dataset.map(
-            tokenize,
-            fn_kwargs={
-                "processing_class": self.processing_class,
-                "add_special_tokens": False,
-            },
-            desc=f"Tokenizing {dataset_name}",
-        )
+    def _prepare_dataset(self, dataset: HFDataset | Dataset, dataset_name: str) -> HFDataset | Dataset:
+        if isinstance(dataset, HFDataset):
+            dataset = dataset.map(
+                self.augment_transform,
+                remove_columns=dataset.column_names,
+                desc=f"Applying data augmentation to {dataset_name}",
+            )
+            
+            column_names = next(iter(dataset)).keys()
+            dataset = dataset.map(
+                apply_chat_template,
+                fn_kwargs={"tokenizer": self.processing_class},
+                remove_columns="messages" if "messages" in column_names else None,
+                desc=f"Applying chat template to {dataset_name}",
+            )
+            
+            dataset = dataset.map(
+                tokenize,
+                fn_kwargs={
+                    "processing_class": self.processing_class,
+                    "add_special_tokens": False,
+                },
+                desc=f"Tokenizing {dataset_name}",
+            )
 
-        return dataset
+            return dataset
+        elif isinstance(dataset, ARCTrainDataset) or isinstance(dataset, ARCValidationDataset):
+            def transform_fn(datapoint: DataPointDict) -> Any:
+                prompt_completion_pair = self.augment_transform(datapoint)
+                chat_template_applied = apply_chat_template(
+                    prompt_completion_pair,
+                    tokenizer=self.processing_class,
+                )
+                processed = tokenize(chat_template_applied, self.processing_class, add_special_tokens=False)
+                return processed
+            dataset.transform = transform_fn
+            return dataset
     
     def log(self, message: str, type: Literal["info", "good", "print"] = "info"):
         """

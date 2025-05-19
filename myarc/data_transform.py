@@ -27,3 +27,9 @@ class RandomAugmentationTransform(DataTransform):
         if random.random() < self.apply_task_augmentation_probability:
             augmented_datapoint = random_task_augmentation(augmented_datapoint)
         return arc_utils.datapoint_to_prompt_completion_pair(augmented_datapoint)
+
+def get_data_transform(use_data_augmentation: bool) -> DataTransform:
+    if use_data_augmentation:
+        return RandomAugmentationTransform()
+    else:
+        return DefaultFormatMessages()

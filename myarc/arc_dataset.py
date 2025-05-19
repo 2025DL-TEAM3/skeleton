@@ -1,4 +1,5 @@
 import random
+from typing import Literal, Callable
 from datasets import Dataset as HFDataset
 from torch.utils.data import Dataset, Sampler
 import glob
@@ -109,7 +110,7 @@ def build_hf_train_val_dataset(
         return splitted["train"], splitted["test"]
 
 def build_torch_train_val_dataset(
-    dataset_path: str | None = None,
+    dataset_path: str,
     reasoning_task_path: str | None = None,
     num_train_examples_per_normal_task: int = 3,
     num_datapoints_per_task: int = 50,
@@ -119,14 +120,19 @@ def build_torch_train_val_dataset(
     # Set seed for reproducibility
     random.seed(seed)
     
+    json_file_paths = sorted(glob.glob(f"{dataset_path}/*.json"))
+    random.shuffle(json_file_paths)
+    split = int(len(json_file_paths) * (1 - val_ratio))
+    train_file_paths, val_file_paths = json_file_paths[:split], json_file_paths[split:]
+    
     train_dataset = ARCTrainDataset(
-        dataset_path=dataset_path,
+        json_paths=train_file_paths,
         num_train_examples_per_normal_task=num_train_examples_per_normal_task,
         num_datapoints_per_task=num_datapoints_per_task,
     )
 
     val_dataset = ARCValidationDataset(
-        dataset_path=dataset_path,
+        json_paths=val_file_paths,
         num_train_examples_per_normal_task=num_train_examples_per_normal_task,
         num_datapoints_per_task=num_datapoints_per_task,
         val_ratio=val_ratio,
@@ -147,6 +153,7 @@ def build_train_val_dataset(
     return_type: Literal["pt", "hf"] = "pt",
 ) -> tuple[HFDataset, HFDataset] | tuple["ARCTrainDataset", "ARCValidationDataset"]:
     if return_type == "pt":
+        print("Using PyTorch dataset")
         return build_torch_train_val_dataset(
             dataset_path=dataset_path,
             reasoning_task_path=reasoning_task_path,
@@ -156,6 +163,7 @@ def build_train_val_dataset(
             seed=seed,
         )
     elif return_type == "hf":
+        print("Using Hugging Face dataset")
         return build_hf_train_val_dataset(
             dataset_path=dataset_path,
             reasoning_task_path=reasoning_task_path,
@@ -194,16 +202,18 @@ class TaskBatchSampler(Sampler):
 class ARCTrainDataset(Dataset):
     def __init__(
         self,
-        dataset_path: str | None = None,
+        json_paths: list[str],
         num_train_examples_per_normal_task: int = 3,
         num_datapoints_per_task: int = 50,
+        transform: Callable[[DataPointDict], Any] | None = None,
     ):
-        self.normal_tasks = arc_utils.load_json_normal_tasks(dataset_path)
+        self.normal_tasks = arc_utils.load_tasks_from_paths(json_paths)
         self.num_train_examples_per_normal_task = num_train_examples_per_normal_task
         self.num_datapoints_per_task = num_datapoints_per_task
         self.total_num_datapoints = len(self.normal_tasks) * num_datapoints_per_task
+        self.transform = transform
 
-        print(f"Loaded total {len(self.normal_tasks)} tasks from {dataset_path}")
+        print(f"Loaded total {len(self.normal_tasks)} train tasks")
         print(f"Total # datapoints per epoch: {self.total_num_datapoints}")
     
     def __len__(self):
@@ -234,25 +244,30 @@ class ARCTrainDataset(Dataset):
         # prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
 
         # return prompt_completion_pair
+        
+        if self.transform:
+            any_type_datapoint = self.transform(datapoint)
 
-        return datapoint
+        return any_type_datapoint
 
 class ARCValidationDataset(Dataset):
     def __init__(
         self,
-        dataset_path: str | None = None,
+        json_paths: list[str],
         num_train_examples_per_normal_task: int = 3,
         num_datapoints_per_task: int = 50,
-        val_ratio: float = 0.03,
-        seed: int = 42,
+        val_ratio: float = 0.05,
+        seed: int = 1234,
+        transform: Callable[[DataPointDict], Any] | None = None,
     ):
         # no instance variable: free after init
-        normal_tasks = arc_utils.load_json_normal_tasks(dataset_path) 
+        normal_tasks = arc_utils.load_tasks_from_paths(json_paths)
         self.num_train_examples_per_normal_task = num_train_examples_per_normal_task
         self.num_datapoints_per_task = num_datapoints_per_task
         self.total_num_datapoints = len(normal_tasks) * num_datapoints_per_task
+        self.transform = transform
 
-        print(f"Loaded total {len(normal_tasks)} tasks from {dataset_path}")
+        print(f"Loaded total {len(normal_tasks)} validation tasks")
         print(f"Total # datapoints per epoch: {self.total_num_datapoints}")
 
         self.seed = seed

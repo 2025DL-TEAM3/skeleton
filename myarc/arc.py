@@ -30,7 +30,7 @@ from .arc_utils import format_prompt_messages
 from . import arc_utils, data_transform
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
-from .trainer import ARCSFTTrainer
+from .trainer import ARCSFTTrainer, apply_chat_template, tokenize
     
 class ARCSolver:
     def __init__(
@@ -142,9 +142,8 @@ class ARCSolver:
     def train(
         self, 
         *,
-        # train_dataset: ARCTrainDataset,
         train_dataset: ARCTrainDataset | HFDataset,
-        eval_dataset: ARCValidationDataset | HFDataset= None, # TODO
+        eval_dataset: ARCValidationDataset | HFDataset= None,
         use_trl_sfttrainer: bool = False,
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
@@ -169,9 +168,6 @@ class ARCSolver:
         """
         Train a model with train_dataset.
         """
-        if eval_dataset is not None and not isinstance(eval_dataset, HFDataset):
-            raise ValueError("eval_dataset must be a HuggingFace dataset for now.")
-
         os.makedirs(self.checkpoint_save_path, exist_ok=True)
         os.makedirs(self.logging_save_path, exist_ok=True)
 
@@ -224,30 +220,24 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
         
-        transform = data_transform.DefaultFormatMessages()
-        transform_name = "DefaultFormatMessages"
-        if use_data_augmentation:
-            msg.info("Using data augmentation.")
-            transform = data_transform.RandomAugmentationTransform()
-            transform_name = "RandomAugmentationTransform"
-        else:
-            msg.info("Using default data transform.")
-        
-        train_dataset = train_dataset.map(
-            transform,
-            remove_columns=train_dataset.column_names,
-            desc=f"Applying train dataset transform ({transform_name})",
-        )
-        
-        if eval_dataset is not None:
-            eval_dataset = eval_dataset.map(
-                transform,
-                remove_columns=eval_dataset.column_names,
-                desc=f"Applying eval dataset transform ({transform_name})",
-            )
-        
-        start_time = time.time()
+        transform = data_transform.get_data_transform(use_data_augmentation)
+        transform_name = transform.__class__.__name__
+        msg.info(f"Using transform: {transform_name}")  
         if use_trl_sfttrainer:
+            train_dataset = train_dataset.map(
+                transform,
+                remove_columns=train_dataset.column_names,
+                desc=f"Applying train dataset transform ({transform_name})",
+            )
+            
+            if eval_dataset is not None:
+                eval_dataset = eval_dataset.map(
+                    transform,
+                    remove_columns=eval_dataset.column_names,
+                    desc=f"Applying eval dataset transform ({transform_name})",
+                )
+            
+            start_time = time.time()
             msg.info("Using SFTTrainer for training.")
             trainer = SFTTrainer(
                 model=self.base_model if self.peft_model is None else self.peft_model,
@@ -260,12 +250,15 @@ class ARCSolver:
             
             trainer.train()
         else:
+            start_time = time.time()
             msg.info("Using ARCSFTTrainer for training.")
+            
             trainer = ARCSFTTrainer(
                 model=self.base_model if self.peft_model is None else self.peft_model,
                 processing_class=self.tokenizer,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
+                augment_transform=transform,
                 args=training_args,
                 peft_config=peft_config,
                 patience=patience,

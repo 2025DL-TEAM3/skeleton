@@ -39,3 +39,7 @@ class ChatEntry(TypedDict):
 class PromptCompletionPair(TypedDict):
     prompt: List[ChatEntry]
     completion: List[ChatEntry]
+    
+class FormattedPromptCompletionPair(TypedDict):
+    prompt: str
+    completion: str
