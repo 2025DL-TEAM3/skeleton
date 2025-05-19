@@ -1,5 +1,5 @@
 dataset:
   num_train_examples_per_task: 3
-  num_datapoints_per_task: 50
+  num_datapoints_per_task: 1
   val_ratio: 0.05
   seed: 1234

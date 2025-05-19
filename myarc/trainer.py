@@ -225,6 +225,7 @@ class ARCSFTTrainer:
                         f"step {step + 1} "
                         f"train loss: {total_loss / (step + 1):.4f} "
                         f"current lr: {current_lr:.6f} "
+                        , type="print"
                     )
                 
                 if global_step % self.args.eval_steps == 0:
@@ -233,6 +234,7 @@ class ARCSFTTrainer:
                         f"[Validation] [Epoch {epoch + 1}/{self.args.num_train_epochs}] "
                         f"step {global_step} "
                         f"validation loss: {val_loss:.4f} "
+                        , type="print"
                     )
                     
                     self.log_metrics({
@@ -252,7 +254,7 @@ class ARCSFTTrainer:
                         improved = True
                     
                     if improved:
-                        self.log(", ".join(improvement_message))
+                        self.log(", ".join(improvement_message), type="print")
                         self.save_model(
                             best_model_path,
                             optimizer,
@@ -264,10 +266,10 @@ class ARCSFTTrainer:
                         patience_counter = 0
                     else:
                         patience_counter += 1
-                        self.log(f"Validation metrics did not improve. Patience: {patience_counter}/{self.patience}")
+                        self.log(f"Validation metrics did not improve. Patience: {patience_counter}/{self.patience}", type="print")
                     
                     if self.patience > 0 and patience_counter >= self.patience:
-                        self.log(f"Early stopping triggered after {self.patience} validation checks without improvement")
+                        self.log(f"Early stopping triggered after {self.patience} validation checks without improvement", type="print")
                         self.load_checkpoint(best_model_path, optimizer, scheduler)
                         return
                 
@@ -287,6 +289,7 @@ class ARCSFTTrainer:
             self.log(
                 f"[Epoch {epoch + 1}/{self.args.num_train_epochs}] "
                 f"average training loss: {avg_epoch_loss:.4f} "
+                , type="print"
             )
             
             torch.cuda.empty_cache()
@@ -300,9 +303,9 @@ class ARCSFTTrainer:
         
 
         self.model.eval()
-        self.log(f"===== Training completed =====")
+        self.log(f"===== Training completed =====", type="good")
         end_time = time.time()
-        self.log(f"Total training time: {end_time - start_time:.2f} seconds")
+        self.log(f"Total training time: {end_time - start_time:.2f} seconds", type="print")
         
         self.save_model(
             os.path.join(self.args.output_dir, "checkpoint-final"),
