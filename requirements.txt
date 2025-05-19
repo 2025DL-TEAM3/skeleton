@@ -9,3 +9,4 @@ bitsandbytes
 wasabi
 Jinja2
 trl
+hydra-core

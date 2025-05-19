@@ -1,3 +1,4 @@
 model:
   model_id: Qwen/Qwen3-0.6B
   lora_rank: 32
+  enable_gradient_checkpointing: true
