@@ -1,7 +1,9 @@
 import random
 from datasets import Dataset as HFDataset
 from torch.utils.data import Dataset, Sampler
-
+import glob
+import json
+import os
 from . import arc_utils
 from .datatypes import *
 
@@ -56,46 +58,55 @@ def build_hf_train_val_dataset(
     num_train_examples_per_normal_task: int = 3,
     num_datapoints_per_task: int = 50,
     val_ratio: float = 0.1,
+    seed: int = 42,
 ) -> tuple[HFDataset, HFDataset]:
+    # Set seed for reproducibility
+    random.seed(seed)
+    
     if dataset_path is not None:
-        # task 파일들을 로드하고 섞기
-        task_files = sorted(glob.glob(f"{dataset_path}/*.json"))
-        random.shuffle(task_files)
-        
-        # train/val split
-        split_idx = int(len(task_files) * (1 - val_ratio))
-        train_files = task_files[:split_idx]
-        val_files = task_files[split_idx:]
+        # 1) split files
+        all_files = sorted(glob.glob(f"{dataset_path}/*.json"))
+        random.shuffle(all_files)
+        split = int(len(all_files) * (1 - val_ratio))
+        train_files, val_files = all_files[:split], all_files[split:]
         
         print(f"Train files: {len(train_files)}, Validation files: {len(val_files)}")
         
-        # train dataset 생성
-        train_datapoints = []
-        for task_file in train_files:
-            task = arc_utils.load_json_normal_tasks(task_file)[0]  # 각 파일은 하나의 task만 포함
-            for _ in range(num_datapoints_per_task):
-                datapoint = arc_utils.sample_datapoints_from_normal_task(
-                    task,
-                    num_samples=num_train_examples_per_normal_task + 1
-                )
-                train_datapoints.append(datapoint)
+        # 2) helper to load one file
+        def load_task(path):
+            with open(path) as f:
+                examples = json.load(f)
+            return {
+                "file_path": path,
+                "task_id": os.path.basename(path).rsplit(".", 1)[0],
+                "examples": examples
+            }
         
-        # val dataset 생성
-        val_datapoints = []
-        for task_file in val_files:
-            task = arc_utils.load_json_normal_tasks(task_file)[0]
-            for _ in range(num_datapoints_per_task):
-                datapoint = arc_utils.sample_datapoints_from_normal_task(
-                    task,
-                    num_samples=num_train_examples_per_normal_task + 1
-                )
-                val_datapoints.append(datapoint)
+        # 3) sample datapoints
+        def sample_from_files(files):
+            dps = []
+            for p in files:
+                task = load_task(p)
+                for _ in range(num_datapoints_per_task):
+                    dp = arc_utils.sample_datapoints_from_normal_task(
+                        task,
+                        num_samples=num_train_examples_per_normal_task + 1
+                    )
+                    dps.append(dp)
+            random.shuffle(dps)
+            return dps
         
-        train_dataset = HFDataset.from_list(train_datapoints)
-        val_dataset = HFDataset.from_list(val_datapoints)
+        train_dps = sample_from_files(train_files)
+        val_dps = sample_from_files(val_files)
+        
+        train_dataset = HFDataset.from_list(train_dps)
+        val_dataset = HFDataset.from_list(val_dps)
         
         print(f"Train dataset size: {len(train_dataset)}")
         print(f"Validation dataset size: {len(val_dataset)}")
+        
+        # Reset random seed
+        random.seed()
         
         return train_dataset, val_dataset
     else:
@@ -106,29 +117,36 @@ def build_hf_train_val_dataset(
             num_train_examples_per_normal_task=num_train_examples_per_normal_task,
             num_datapoints_per_task=num_datapoints_per_task,
         )
-        splitted = hf_dataset.train_test_split(test_size=val_ratio)
+        splitted = hf_dataset.train_test_split(test_size=val_ratio, seed=seed)
         return splitted["train"], splitted["test"]
 
 def build_torch_train_val_dataset(
     dataset_path: str | None = None,
     reasoning_task_path: str | None = None,
     num_train_examples_per_normal_task: int = 3,
-    num_datapoints_per_task_task: int = 50,
+    num_datapoints_per_task: int = 50,
     val_ratio: float = 0.1,
+    seed: int = 42,
 ) -> tuple["ARCTrainDataset", "ARCValidationDataset"]:
+    # Set seed for reproducibility
+    random.seed(seed)
+    
     train_dataset = ARCTrainDataset(
         dataset_path=dataset_path,
         num_train_examples_per_normal_task=num_train_examples_per_normal_task,
-        num_datapoints_per_task=num_datapoints_per_task_task,
+        num_datapoints_per_task=num_datapoints_per_task,
     )
 
     val_dataset = ARCValidationDataset(
         dataset_path=dataset_path,
         num_train_examples_per_normal_task=num_train_examples_per_normal_task,
-        num_datapoints_per_task=num_datapoints_per_task_task,
+        num_datapoints_per_task=num_datapoints_per_task,
         val_ratio=val_ratio,
     )
 
+    # Reset random seed
+    random.seed()
+    
     return train_dataset, val_dataset
 
 def build_train_val_dataset(
@@ -137,6 +155,7 @@ def build_train_val_dataset(
     num_train_examples_per_normal_task: int = 3,
     num_datapoints_per_task: int = 50,
     val_ratio: float = 0.1,
+    seed: int = 42,
     return_type: Literal["pt", "hf"] = "pt",
 ) -> tuple[HFDataset, HFDataset] | tuple["ARCTrainDataset", "ARCValidationDataset"]:
     if return_type == "pt":
@@ -144,8 +163,9 @@ def build_train_val_dataset(
             dataset_path=dataset_path,
             reasoning_task_path=reasoning_task_path,
             num_train_examples_per_normal_task=num_train_examples_per_normal_task,
-            num_datapoints_per_task_task=num_datapoints_per_task,
+            num_datapoints_per_task=num_datapoints_per_task,
             val_ratio=val_ratio,
+            seed=seed,
         )
     elif return_type == "hf":
         return build_hf_train_val_dataset(
@@ -154,6 +174,7 @@ def build_train_val_dataset(
             num_train_examples_per_normal_task=num_train_examples_per_normal_task,
             num_datapoints_per_task=num_datapoints_per_task,
             val_ratio=val_ratio,
+            seed=seed,
         )
     else:
         raise ValueError(f"Unknown return type: {return_type}")
