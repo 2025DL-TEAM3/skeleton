@@ -7,3 +7,4 @@ artifacts/requirements.txt
 *log*.txt
 
 .env
+.venv/
