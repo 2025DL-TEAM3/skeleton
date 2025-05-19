@@ -30,6 +30,7 @@ from .arc_utils import format_prompt_messages
 from . import arc_utils, data_transform
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
+from .trainer import ARCSFTTrainer
     
 class ARCSolver:
     def __init__(
@@ -68,7 +69,7 @@ class ARCSolver:
             "torch_dtype": torch.float16,  # Set the data type for the model
             "use_cache": False,  # Disable caching to save memory
             "token": token,
-            "device_map": "auto",  # Automatically map the model to available devices
+            # "device_map": "auto",  # Automatically map the model to available devices
         }
         if cache_dir is not None:
             print(f"Using cache dir: {cache_dir}")
@@ -80,7 +81,7 @@ class ARCSolver:
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
-        )
+        ).to(self.device)
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
@@ -143,6 +144,7 @@ class ARCSolver:
         # train_dataset: ARCTrainDataset,
         train_dataset: ARCTrainDataset | HFDataset,
         eval_dataset: ARCValidationDataset | HFDataset= None, # TODO
+        use_trl_sfttrainer: bool = False,
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
         gradient_accumulation_steps: int = 4,
@@ -156,9 +158,12 @@ class ARCSolver:
         lr_scheduler_type: str = "linear",
         fp16: bool = True,
         eval_strategy: str = "steps",
+        eval_steps: int = 1000,
         save_strategy: str = "epoch",
         logging_strategy: str = "steps",
+        logging_steps: int = 100,
         use_data_augmentation: bool = True,
+        patience: int = 5,
     ):
         """
         Train a model with train_dataset.
@@ -199,9 +204,10 @@ class ARCSolver:
             num_train_epochs=num_epochs,
             
             eval_strategy=eval_strategy,
+            eval_steps=eval_steps,
             logging_strategy=logging_strategy,
             logging_dir=self.logging_save_path,
-            logging_steps=10,
+            logging_steps=logging_steps,
             log_level="debug",
             save_strategy=save_strategy,
             
@@ -218,35 +224,53 @@ class ARCSolver:
         )
         
         transform = data_transform.DefaultFormatMessages()
+        transform_name = "DefaultFormatMessages"
         if use_data_augmentation:
             msg.info("Using data augmentation.")
             transform = data_transform.RandomAugmentationTransform()
+            transform_name = "RandomAugmentationTransform"
         else:
             msg.info("Using default data transform.")
         
         train_dataset = train_dataset.map(
             transform,
             remove_columns=train_dataset.column_names,
-            desc="Applying train dataset transform",
+            desc=f"Applying train dataset transform ({transform_name})",
         )
         
         if eval_dataset is not None:
             eval_dataset = eval_dataset.map(
                 transform,
                 remove_columns=eval_dataset.column_names,
-                desc="Applying eval dataset transform",
+                desc=f"Applying eval dataset transform ({transform_name})",
             )
         
         start_time = time.time()
-        trainer = SFTTrainer(
-            model=self.base_model if self.peft_model is None else self.peft_model,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            args=training_args,
-            peft_config=peft_config,
-        )
+        if use_trl_sfttrainer:
+            msg.info("Using SFTTrainer for training.")
+            trainer = SFTTrainer(
+                model=self.base_model if self.peft_model is None else self.peft_model,
+                processing_class=self.tokenizer,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                args=training_args,
+                peft_config=peft_config,
+            )
+            
+            trainer.train()
+        else:
+            msg.info("Using ARCSFTTrainer for training.")
+            trainer = ARCSFTTrainer(
+                model=self.base_model if self.peft_model is None else self.peft_model,
+                processing_class=self.tokenizer,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                args=training_args,
+                peft_config=peft_config,
+                patience=patience,
+            )
 
-        trainer.train()
+            trainer.train()
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
         end_time = time.time()
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
