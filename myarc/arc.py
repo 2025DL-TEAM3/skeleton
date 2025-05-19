@@ -217,7 +217,13 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
         
-        transform = data_transform.RandomAugmentationTransform() if use_data_augmentation else data_transform.DefaultFormatMessages()
+        transform = data_transform.DefaultFormatMessages()
+        if use_data_augmentation:
+            msg.info("Using data augmentation.")
+            transform = data_transform.RandomAugmentationTransform()
+        else:
+            msg.info("Using default data transform.")
+        
         train_dataset = train_dataset.map(
             transform,
             remove_columns=train_dataset.column_names,
@@ -231,6 +237,7 @@ class ARCSolver:
                 desc="Applying eval dataset transform",
             )
         
+        start_time = time.time()
         trainer = SFTTrainer(
             model=self.base_model if self.peft_model is None else self.peft_model,
             train_dataset=train_dataset,
@@ -240,6 +247,9 @@ class ARCSolver:
         )
 
         trainer.train()
+        trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
+        end_time = time.time()
+        msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
 
 
     def test_time_training(self, examples: List[ExampleDict]):
@@ -263,6 +273,7 @@ class ARCSolver:
             eval_strategy="no",
             save_strategy="no",
             logging_strategy="no",
+            use_data_augmentation=True,
         )
         msg.good("Test time training completed.")
 

@@ -14,6 +14,6 @@ train:
   lr_scheduler_type: linear
   fp16: true
 
-  eval_strategy: "steps"
+  eval_strategy: "epoch"
 
   use_data_augmentation: true
