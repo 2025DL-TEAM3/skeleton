@@ -30,212 +30,7 @@ from .arc_utils import format_prompt_messages
 from . import arc_utils, data_transform
 from .datatypes import *
 from .arc_dataset import TaskBatchSampler, ARCTrainDataset, ARCValidationDataset
-
-class ARCSFTTrainer:
-    def __init__(
-        self,
-        model: PreTrainedModel | PeftModel,
-        train_dataset_builder: Callable[[], HFDataset],
-        train_dataset_transform: Callable[[DataPointDict], PromptCompletionPair] = None,
-        eval_dataset: HFDataset = None,
-        eval_dataset_transform: Callable[[DataPointDict], PromptCompletionPair] = None,
-        processing_class: PreTrainedTokenizer = None,
-        args: Optional[Union[SFTConfig, TrainingArguments]] = None,
-        peft_config: Optional[PeftConfig] = None,
-        use_task_batch_sampler: bool = True,
-    ):  
-        self.model = model
-        self.train_dataset_builder = train_dataset_builder
-        if train_dataset_transform is None:
-            self.train_dataset_transform = data_transform.DefaultFormatMessages()
-        else:
-            self.train_dataset_transform = train_dataset_transform
-
-        self.processing_class = processing_class
-
-        self.eval_dataset = eval_dataset
-        if eval_dataset is not None and args.eval_strategy != "no":
-            if eval_dataset_transform is None:
-                eval_dataset_transform = data_transform.DefaultFormatMessages()
-            self.eval_dataset = eval_dataset.map(
-                eval_dataset_transform,
-                remove_columns=eval_dataset.column_names,
-                desc="Applying eval dataset transform",
-            )
-        else:
-            self.eval_dataset = None
-            eval_dataset_transform = None
-
-        if args is None:
-            args = SFTConfig(f"{model.config._name_or_path.split('/')[-1]}-SFT")
-        self.args = args
-        if isinstance(model, PeftModel):
-            self.peft_config = None
-        else:
-            self.peft_config = peft_config
-        self.use_task_batch_sampler = use_task_batch_sampler
-        self.num_epochs = args.num_train_epochs
-        
-        # TODO: oom handling
-        self.train_datasets: list[HFDataset] = [
-            self.train_dataset_builder() for _ in range(self.num_epochs)
-        ]
-        
-        # TODO: make it configurable
-        self.eval_strategy = args.eval_strategy
-        self.logging_strategy = args.logging_strategy
-        self.logging_dir = args.logging_dir
-        self.logging_file = os.path.join(self.logging_dir, "train.log")
-        self.save_strategy = args.save_strategy 
     
-    def log(self, message: str, trainer: SFTTrainer = None, msg_type: str = "info"):
-        if self.logging_strategy == "no":
-            return
-        
-        with open(self.logging_file, "a") as f:
-            f.write(f"{message}\n")
-        try:
-            msg_fn = getattr(msg, msg_type)
-            msg_fn(message)
-        except Exception as e:
-            # fallback to msg.info
-            msg.info(message)
-        if trainer is not None:
-            trainer.log(message)
-    
-    def train(self):
-        start_time = time.time()
-        train_dataset = None
-        for epoch in range(self.num_epochs):
-            self.log(f"Epoch {epoch + 1}/{self.num_epochs}")
-            
-            epoch_start_time = time.time()
-            # train_dataset = self.train_dataset_builder()
-            train_dataset = self.train_datasets[epoch]
-            
-            train_dataset = train_dataset.map(
-                self.train_dataset_transform,
-                remove_columns=train_dataset.column_names,
-                desc=f"Applying train dataset transform for epoch {epoch + 1}"
-            )
-
-            training_arguments = self.prepare_training_arguments(self.args, epoch)
-
-            # trainer = TaskBatchSamplingSFTTrainer(
-            trainer = SFTTrainer(
-                model=self.model,
-                processing_class=self.processing_class,
-                train_dataset=train_dataset,
-                eval_dataset=self.eval_dataset,
-                args=training_arguments,
-                peft_config=self.peft_config,
-                # use_task_batch_sampler=self.use_task_batch_sampler,
-            )
-
-            trainer.train()
-
-            if self.eval_dataset is not None and self.eval_strategy != "no":
-                eval_metrics = trainer.evaluate()
-                self.log(f"[Eval][Epoch {epoch + 1} / {self.num_epochs}] {eval_metrics}")
-
-            self.model = trainer.model
-            model_checkpoint_dir = os.path.join(
-                training_arguments.output_dir, f"checkpoint-{epoch + 1}"
-            )
-            trainer.save_model(model_checkpoint_dir)
-
-            epoch_end_time = time.time()
-            self.log(f"Epoch {epoch + 1} completed in {epoch_end_time - epoch_start_time:.2f} seconds")
-        
-            if epoch + 1 == self.num_epochs:
-                # save final model
-                final_model_dir = os.path.join(training_arguments.output_dir, "checkpoint-final")
-                trainer.save_model(final_model_dir)
-                
-            # explicit memory cleanup
-            del trainer
-            torch.cuda.empty_cache()
-            gc.collect()
-            print("Memory cleaned up.")
-        
-        end_time = time.time()
-        self.log(f"Training completed in {end_time - start_time:.2f} seconds", msg_type="good")
-    
-    def prepare_training_arguments(self, base_args: SFTConfig, epoch: int) -> SFTConfig:
-        args = copy.deepcopy(base_args)
-
-        args.logging_strategy = "no"
-        args.save_strategy = "no"
-        args.eval_strategy = "no"
-
-        args.num_train_epochs = 1
-        return args
-
-class TaskBatchSamplingSFTTrainer(SFTTrainer):
-    def __init__(
-        self,
-        model: PreTrainedModel,
-        train_dataset: HFDataset = None,
-        eval_dataset: HFDataset = None,
-        processing_class: PreTrainedTokenizer = None,
-        args: Optional[Union[SFTConfig, TrainingArguments]] = None,
-        peft_config: Optional[PeftConfig] = None,
-        use_task_batch_sampler: bool = True,
-    ):    
-        # args.dataset_kwargs = {
-        #     'skip_prepare_dataset': True, # Customize dataset
-        # }
-        super().__init__(
-            model=model,
-            processing_class=processing_class,
-            # TODO: set to None, will be set in get_train_dataloader
-            # for now, just set to huggingface dataset
-            train_dataset=train_dataset, 
-            eval_dataset=eval_dataset,
-            args=args,
-            peft_config=peft_config,
-        )
-        self.use_task_batch_sampler = use_task_batch_sampler
-    
-    def get_train_dataloader(self) -> DataLoader:
-        if not self.use_task_batch_sampler:
-            return super().get_train_dataloader()
-    
-        raise ValueError("TaskBatchSampler is not supported yet.")
-        
-        if self.train_dataset is None:
-            raise ValueError("Trainer: training requires a train_dataset.")
-
-        # train_dataset = self.train_dataset_builder()
-        train_dataset = self.train_dataset
-        data_collator = self.data_collator
-
-        if isinstance(train_dataset, datasets.Dataset):
-            train_dataset = self._remove_unused_columns(train_dataset, description="training")
-        else:
-            data_collator = self._get_collator_with_removed_columns(data_collator, description="training")
-
-        dataloader_params = {
-            # Removed "batch_size" because we use batch_sampler below
-            "collate_fn": data_collator,
-            "num_workers": self.args.dataloader_num_workers,
-            "pin_memory": self.args.dataloader_pin_memory,
-            "persistent_workers": self.args.dataloader_persistent_workers,
-        }
-
-        if not isinstance(train_dataset, torch.utils.data.IterableDataset):
-            dataloader_params["drop_last"] = self.args.dataloader_drop_last
-            dataloader_params["worker_init_fn"] = seed_worker
-            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
-
-            dataloader_params["batch_sampler"] = TaskBatchSampler(
-                dataset=train_dataset,
-                batch_size=self._train_batch_size,
-            )
-        print(f"Dataloader loaded with {len(train_dataset)} samples.")
-        dataloader = DataLoader(train_dataset, **dataloader_params)
-        return self.accelerator.prepare(dataloader)
-
 class ARCSolver:
     def __init__(
         self, 
@@ -346,7 +141,7 @@ class ARCSolver:
         self, 
         *,
         # train_dataset: ARCTrainDataset,
-        train_dataset_builder: Callable[[], ARCTrainDataset] | Callable[[], HFDataset],
+        train_dataset: ARCTrainDataset | HFDataset,
         eval_dataset: ARCValidationDataset | HFDataset= None, # TODO
         num_epochs: int = 5,
         learning_rate: float = 5e-5,
@@ -360,9 +155,9 @@ class ARCSolver:
         max_grad_norm: float = 1.0,
         lr_scheduler_type: str = "linear",
         fp16: bool = True,
-        eval_strategy: str = "epoch",
+        eval_strategy: str = "steps",
         save_strategy: str = "epoch",
-        logging_strategy: str = "epoch",
+        logging_strategy: str = "steps",
     ):
         """
         Train a model with train_dataset.
@@ -405,6 +200,8 @@ class ARCSolver:
             eval_strategy=eval_strategy,
             logging_strategy=logging_strategy,
             logging_dir=self.logging_save_path,
+            logging_steps=10,
+            log_level="debug",
             save_strategy=save_strategy,
             
             learning_rate=learning_rate,
@@ -418,19 +215,28 @@ class ARCSolver:
             max_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
         )
-
-        trainer = ARCSFTTrainer(
-            model=self.base_model if self.peft_model is None else self.peft_model,
-            processing_class=self.tokenizer,
-            train_dataset_builder=train_dataset_builder,
-            train_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
-            eval_dataset=eval_dataset,
-            eval_dataset_transform=data_transform.RandomAugmentationTransform(), # TODO: make it configurable
-            args=training_args,
-            peft_config=peft_config,
-            use_task_batch_sampler=use_task_batch_sampler,
+        
+        train_dataset = train_dataset.map(
+            data_transform.RandomAugmentationTransform(), # TODO: make it configurable
+            remove_columns=train_dataset.column_names,
+            desc="Applying train dataset transform",
         )
         
+        if eval_dataset is not None:
+            eval_dataset = eval_dataset.map(
+                data_transform.RandomAugmentationTransform(), # TODO: make it configurable
+                remove_columns=eval_dataset.column_names,
+                desc="Applying eval dataset transform",
+            )
+        
+        trainer = SFTTrainer(
+            model=self.base_model if self.peft_model is None else self.peft_model,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            args=training_args,
+            peft_config=peft_config,
+        )
+
         trainer.train()
 
 
