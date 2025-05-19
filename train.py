@@ -43,7 +43,7 @@ def main(cfg: DictConfig):
         cache_dir=cfg.cache_dir,
         **model_config,
     )
-    msg.good(f"Model: {solver.model_id}")
+    msg.good(f"Model: {solver.model_id}, Lora Rank: {cfg.model.lora_rank}")
 
     msg.info("Starting training...")
     train_config = OmegaConf.to_container(cfg.train, resolve=True)

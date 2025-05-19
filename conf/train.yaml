@@ -1,7 +1,9 @@
 train:
+  use_trl_sfttrainer: false
+
   num_epochs: 5
+  patience: 5
   learning_rate: 5e-5
-  # learning_rate: 1e-4
   gradient_accumulation_steps: 4
   batch_size: 1
   eval_batch_size: 1
@@ -9,11 +11,18 @@ train:
   warmup_ratio: 0.05
   resume_from_checkpoint: null
 
+  # for now, customized trainer uses fixed optimizer(paged_adamw_8bit) and scheduler(linear)
   optimizer: paged_adamw_8bit
-  max_grad_norm: 1.0
   lr_scheduler_type: linear
+  max_grad_norm: 1.0
+
   fp16: true
 
-  eval_strategy: "epoch"
+  # Do not change for now
+  eval_strategy: "steps"
+  eval_steps: 1000
+  save_strategy: "epoch"
+  logging_strategy: "steps"
+  logging_steps: 10
 
   use_data_augmentation: true
