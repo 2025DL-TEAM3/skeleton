@@ -165,13 +165,13 @@ def get_random_upscale_params(
         min_safe_max_upscale = min(safe_max_upscale)
         if min_safe_max_upscale < min_upscale:
             print("Warning: Grid is too large to upscale.")
-            return 1
+            return dict(factor=(1, 1))
         _factor = random.randint(min_upscale, min_safe_max_upscale)
         return dict(factor=(_factor, _factor))
     else:
         if min(safe_max_upscale) < min_upscale:
             print("Warning: Grid is too large to upscale.")
-            return 1
+            return dict(factor=(1, 1))
         factor = (1, 1)
         for _ in range(n_tries):
             factor = (
