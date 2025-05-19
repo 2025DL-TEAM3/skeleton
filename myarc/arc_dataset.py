@@ -46,13 +46,6 @@ def build_hf_dataset(
     all_datapoints = normal_datapoints + reasoning_datapoints
     random.shuffle(all_datapoints)
 
-    # hf_dataset = HFDataset.from_list([
-    #     arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-    #     for datapoint in all_datapoints
-    # ])
-    
-    # hf_dataset = hf_dataset.shuffle()
-
     hf_dataset = HFDataset.from_list(all_datapoints) # Note: return datapoint instead of prompt-completion pair
 
     return hf_dataset
@@ -64,16 +57,57 @@ def build_hf_train_val_dataset(
     num_datapoints_per_task: int = 50,
     val_ratio: float = 0.1,
 ) -> tuple[HFDataset, HFDataset]:
-    hf_dataset = build_hf_dataset(
-        dataset_path=dataset_path,
-        reasoning_task_path=reasoning_task_path,
-        num_train_examples_per_normal_task=num_train_examples_per_normal_task,
-        num_datapoints_per_task=num_datapoints_per_task,
-    )
-    splitted = hf_dataset.train_test_split(test_size=val_ratio)
-    train_dataset = splitted["train"]
-    val_dataset = splitted["test"]
-    return train_dataset, val_dataset
+    if dataset_path is not None:
+        # task 파일들을 로드하고 섞기
+        task_files = sorted(glob.glob(f"{dataset_path}/*.json"))
+        random.shuffle(task_files)
+        
+        # train/val split
+        split_idx = int(len(task_files) * (1 - val_ratio))
+        train_files = task_files[:split_idx]
+        val_files = task_files[split_idx:]
+        
+        print(f"Train files: {len(train_files)}, Validation files: {len(val_files)}")
+        
+        # train dataset 생성
+        train_datapoints = []
+        for task_file in train_files:
+            task = arc_utils.load_json_normal_tasks(task_file)[0]  # 각 파일은 하나의 task만 포함
+            for _ in range(num_datapoints_per_task):
+                datapoint = arc_utils.sample_datapoints_from_normal_task(
+                    task,
+                    num_samples=num_train_examples_per_normal_task + 1
+                )
+                train_datapoints.append(datapoint)
+        
+        # val dataset 생성
+        val_datapoints = []
+        for task_file in val_files:
+            task = arc_utils.load_json_normal_tasks(task_file)[0]
+            for _ in range(num_datapoints_per_task):
+                datapoint = arc_utils.sample_datapoints_from_normal_task(
+                    task,
+                    num_samples=num_train_examples_per_normal_task + 1
+                )
+                val_datapoints.append(datapoint)
+        
+        train_dataset = HFDataset.from_list(train_datapoints)
+        val_dataset = HFDataset.from_list(val_datapoints)
+        
+        print(f"Train dataset size: {len(train_dataset)}")
+        print(f"Validation dataset size: {len(val_dataset)}")
+        
+        return train_dataset, val_dataset
+    else:
+        # reasoning task만 있는 경우
+        hf_dataset = build_hf_dataset(
+            dataset_path=None,
+            reasoning_task_path=reasoning_task_path,
+            num_train_examples_per_normal_task=num_train_examples_per_normal_task,
+            num_datapoints_per_task=num_datapoints_per_task,
+        )
+        splitted = hf_dataset.train_test_split(test_size=val_ratio)
+        return splitted["train"], splitted["test"]
 
 def build_torch_train_val_dataset(
     dataset_path: str | None = None,
