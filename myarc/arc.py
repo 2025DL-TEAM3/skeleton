@@ -158,6 +158,7 @@ class ARCSolver:
         eval_strategy: str = "steps",
         save_strategy: str = "epoch",
         logging_strategy: str = "steps",
+        use_data_augmentation: bool = True,
     ):
         """
         Train a model with train_dataset.
@@ -216,15 +217,16 @@ class ARCSolver:
             label_names=["labels"], # TODO: check if needed
         )
         
+        transform = data_transform.RandomAugmentationTransform() if use_data_augmentation else data_transform.DefaultFormatMessages()
         train_dataset = train_dataset.map(
-            data_transform.RandomAugmentationTransform(), # TODO: make it configurable
+            transform,
             remove_columns=train_dataset.column_names,
             desc="Applying train dataset transform",
         )
         
         if eval_dataset is not None:
             eval_dataset = eval_dataset.map(
-                data_transform.RandomAugmentationTransform(), # TODO: make it configurable
+                transform,
                 remove_columns=eval_dataset.column_names,
                 desc="Applying eval dataset transform",
             )

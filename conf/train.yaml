@@ -15,3 +15,5 @@ train:
   fp16: true
 
   eval_strategy: "steps"
+
+  use_data_augmentation: true
