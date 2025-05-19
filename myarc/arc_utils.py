@@ -37,16 +37,10 @@ user_message_template3 = (
     "Only return the output grid (rows as digit sequences; each ending with a newline; no extra text or spaces):"
 )
 
-def load_json_normal_tasks(dataset_path: str) -> list[TaskDict]:
-    json_file_paths = glob.glob(os.path.join(dataset_path, '*.json'))
-    if not json_file_paths:
-        raise FileNotFoundError(f"No JSON files found in {dataset_path}")
-
-    print(f"Found {len(json_file_paths)} JSON files for normal tasks.")
-    
+def load_tasks_from_paths(json_paths: list[str]) -> list[TaskDict]:
     all_tasks = []
-    for json_file_path in json_file_paths:
-        task_id = os.path.basename(json_file_path).split(".")[0]
+    for json_file_path in json_paths:
+        task_id = os.path.basename(json_file_path).rsplit(".", 1)[0]
         try:
             with open(json_file_path, 'r') as f:
                 task_json = json.load(f)
@@ -60,10 +54,19 @@ def load_json_normal_tasks(dataset_path: str) -> list[TaskDict]:
             print(f"Error loading file: {json_file_path} - {e}")
     
     if not all_tasks:
-            raise ValueError("No valid examples found in JSON files.")
+        raise ValueError("No valid examples found in JSON files.")
         
-    print(f"Successfully loaded {len(all_tasks)} JSON files for normal tasks.")
+    print(f"Successfully loaded {len(all_tasks)} JSON files.")
     return all_tasks
+
+def load_json_normal_tasks(dataset_path: str) -> list[TaskDict]:
+    json_file_paths = glob.glob(os.path.join(dataset_path, '*.json'))
+    if not json_file_paths:
+        raise FileNotFoundError(f"No JSON files found in {dataset_path}")
+
+    print(f"Found {len(json_file_paths)} JSON files for normal tasks.")
+    
+    return load_tasks_from_paths(json_file_paths)
 
 def load_json_reasoning_tasks(
     dataset_path: str,

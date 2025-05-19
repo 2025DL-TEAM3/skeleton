@@ -65,42 +65,30 @@ def build_hf_train_val_dataset(
     
     if dataset_path is not None:
         # 1) split files
-        all_files = sorted(glob.glob(f"{dataset_path}/*.json"))
-        random.shuffle(all_files)
-        split = int(len(all_files) * (1 - val_ratio))
-        train_files, val_files = all_files[:split], all_files[split:]
+        json_file_paths = sorted(glob.glob(f"{dataset_path}/*.json"))
+        random.shuffle(json_file_paths)
+        split = int(len(json_file_paths) * (1 - val_ratio))
+        train_file_paths, val_file_paths = json_file_paths[:split], json_file_paths[split:]
         
-        print(f"Train files: {len(train_files)}, Validation files: {len(val_files)}")
+        print(f"Train files: {len(train_file_paths)}, Validation files: {len(val_file_paths)}")
         
-        # 2) helper to load one file
-        def load_task(path):
-            with open(path) as f:
-                examples = json.load(f)
-            return {
-                "file_path": path,
-                "task_id": os.path.basename(path).rsplit(".", 1)[0],
-                "examples": examples
-            }
+        train_tasks = arc_utils.load_tasks_from_paths(train_file_paths)
+        val_tasks = arc_utils.load_tasks_from_paths(val_file_paths)
         
-        # 3) sample datapoints
-        def sample_from_files(files):
-            dps = []
-            for p in files:
-                task = load_task(p)
-                for _ in range(num_datapoints_per_task):
-                    dp = arc_utils.sample_datapoints_from_normal_task(
-                        task,
-                        num_samples=num_train_examples_per_normal_task + 1
-                    )
-                    dps.append(dp)
-            random.shuffle(dps)
-            return dps
+        train_datapoints = [
+            arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1)
+            for task in train_tasks
+            for _ in range(num_datapoints_per_task)
+        ]
         
-        train_dps = sample_from_files(train_files)
-        val_dps = sample_from_files(val_files)
+        val_datapoints = [
+            arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1)
+            for task in val_tasks
+            for _ in range(num_datapoints_per_task)
+        ]
         
-        train_dataset = HFDataset.from_list(train_dps)
-        val_dataset = HFDataset.from_list(val_dps)
+        train_dataset = HFDataset.from_list(train_datapoints)
+        val_dataset = HFDataset.from_list(val_datapoints)
         
         print(f"Train dataset size: {len(train_dataset)}")
         print(f"Validation dataset size: {len(val_dataset)}")
