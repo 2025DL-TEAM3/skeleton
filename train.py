@@ -29,6 +29,7 @@ def main(cfg: DictConfig):
         num_train_examples_per_normal_task=cfg.dataset.num_train_examples_per_task,
         num_datapoints_per_task=cfg.dataset.num_datapoints_per_task * cfg.train.num_epochs, # TODO
         val_ratio=cfg.dataset.val_ratio,
+        seed=cfg.dataset.seed,
         return_type="hf", # TODO
     )
     msg.good(f"Train dataset size: {len(train_dataset)} ({100 * (1 - cfg.dataset.val_ratio):.2f}% of total)")

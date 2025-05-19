@@ -42,6 +42,7 @@ class ARCSolver:
         sep_str: str = "\n",
         cache_dir: str | None = None,
         lora_rank: int = 8,
+        lora_alpha: int = 16,
     ):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -86,7 +87,7 @@ class ARCSolver:
             task_type="CAUSAL_LM",
             inference_mode=False,
             r=lora_rank, 
-            lora_alpha=64,  
+            lora_alpha=lora_alpha,  
             lora_dropout=0.1,
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
             bias="none",
