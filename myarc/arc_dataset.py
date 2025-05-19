@@ -247,6 +247,8 @@ class ARCTrainDataset(Dataset):
         
         if self.transform:
             any_type_datapoint = self.transform(datapoint)
+        else:
+            any_type_datapoint = datapoint
 
         return any_type_datapoint
 
@@ -307,4 +309,11 @@ class ARCValidationDataset(Dataset):
 
     def __getitem__(self, idx: int):
         safe_idx = idx % len(self.validation_datapoints)
-        return self.validation_datapoints[safe_idx]
+        datapoint = self.validation_datapoints[safe_idx]
+        
+        if self.transform:
+            any_type_datapoint = self.transform(datapoint)
+        else:
+            any_type_datapoint = datapoint
+        
+        return any_type_datapoint
