@@ -102,6 +102,10 @@ class ARCSFTTrainer:
                     "in the vocabulary before using it as a padding token."
                 )
         self.data_collator = DataCollatorForLanguageModeling(pad_token_id, completion_only_loss=True)
+        
+        print(len(self.train_dataset), len(self.eval_dataset))
+        print(len(self._get_train_dataloader()))
+        print(len(self._get_eval_dataloader()))
     
     def _prepare_dataset(self, dataset: HFDataset | Dataset, dataset_name: str) -> HFDataset | Dataset:
         if isinstance(dataset, HFDataset):
@@ -350,15 +354,16 @@ class ARCSFTTrainer:
                 loss = self.compute_loss(self.model, batch_device)
                 total_loss += loss.item()
                 
-                if step % self.args.logging_steps == 0:
+                if (step + 1) % self.args.logging_steps == 0:
                     self.log(
                         f"[Eval] step {step + 1} "
                         f"validation loss: {total_loss / (step + 1):.4f} "
+                        , type="print"
                     )
                 
                 del batch_device, loss
         avg_loss = total_loss / len(dataloader)
-        self.log(f"Average validation loss: {avg_loss:.4f}")
+        self.log(f"Average validation loss: {avg_loss:.4f}", type="print")
         return avg_loss
     
     def _get_train_dataloader(self):
