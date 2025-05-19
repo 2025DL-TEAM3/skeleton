@@ -162,7 +162,7 @@ class ARCSFTTrainer:
         """
         with open(self.metric_file, "a", encoding="utf-8") as f:
             f.write(json.dumps(metrics) + "\n")
-        f.flush()
+            f.flush()
     
     def compute_loss(self, model, inputs):
         outputs = model(**inputs)
@@ -189,14 +189,14 @@ class ARCSFTTrainer:
         steps_per_epoch = (len(self.train_dataset) // self.args.per_device_train_batch_size) // self.args.gradient_accumulation_steps
         total_optimizer_steps = steps_per_epoch * self.args.num_train_epochs
         warmup_steps = int(total_optimizer_steps * self.args.warmup_ratio)
-        self.log(f"Warmup steps: {warmup_steps}, total optimizer steps: {total_optimizer_steps}")
+        
         
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
             num_warmup_steps=warmup_steps,
             num_training_steps=total_optimizer_steps,
         )
-        self.log(f"Warmup ratio: {self.args.warmup_ratio}, learning rate: {self.args.learning_rate}", type="print")   
+        self.log(f"Warmup steps: {warmup_steps}, total optimizer steps: {total_optimizer_steps}", type="print")
         
         start_epoch, global_step = 0, 0
         best_val_loss = float("inf")
