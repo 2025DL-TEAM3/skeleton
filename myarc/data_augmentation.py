@@ -70,9 +70,10 @@ def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
     target = random.choice(['input', 'output'])
     
     def augment(grid: Grid) -> Grid:
-        for aug_name in augmentations_names:
-            func, kwargs = params_map[aug_name]
-            grid = func(grid, **kwargs)
+        # choose only one of the augmentations
+        aug_name = random.choice(augmentations_names)
+        func, kwargs = params_map[aug_name]
+        grid = func(grid, **kwargs)
         return grid
     
     augmented_datapoint = datapoint.copy()

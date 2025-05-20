@@ -190,9 +190,12 @@ class ARCSFTTrainer:
             lr=self.args.learning_rate,
         )
         
-        steps_per_epoch = (len(self.train_dataset) // self.args.per_device_train_batch_size) // self.args.gradient_accumulation_steps
-        total_optimizer_steps = steps_per_epoch * self.args.num_train_epochs
+        steps_per_epoch = (len(self.train_dataset) // self.args.per_device_train_batch_size)
+        optimizer_steps_per_epoch = steps_per_epoch // self.args.gradient_accumulation_steps
+        total_steps = steps_per_epoch * self.args.num_train_epochs
+        total_optimizer_steps = optimizer_steps_per_epoch * self.args.num_train_epochs
         warmup_steps = int(total_optimizer_steps * self.args.warmup_ratio)
+        self.log(f"Total steps: {total_steps}, steps per epoch: {steps_per_epoch}", type="print")
         
         
         scheduler = get_linear_schedule_with_warmup(
@@ -200,7 +203,7 @@ class ARCSFTTrainer:
             num_warmup_steps=warmup_steps,
             num_training_steps=total_optimizer_steps,
         )
-        self.log(f"Warmup steps: {warmup_steps}, total optimizer steps: {total_optimizer_steps}", type="print")
+        self.log(f"Warmup steps: {warmup_steps}, total optimizer steps: {total_optimizer_steps}, optimizer steps per epoch: {optimizer_steps_per_epoch}", type="print")
         
         start_epoch, global_step = 0, 0
         best_val_loss = float("inf")
