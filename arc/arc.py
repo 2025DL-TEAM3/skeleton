@@ -189,6 +189,7 @@ class ARCSolver:
             transform,
             remove_columns=train_dataset.column_names,
             desc=f"Applying train dataset transform ({transform_name})",
+            num_proc=4,
         )
         
         if eval_dataset is not None:
@@ -196,6 +197,7 @@ class ARCSolver:
                 transform,
                 remove_columns=eval_dataset.column_names,
                 desc=f"Applying eval dataset transform ({transform_name})",
+                num_proc=4,
             )
         
         start_time = time.time()
