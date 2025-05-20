@@ -6,6 +6,9 @@ defaults:
   - predict
   - _self_
 
+token: null
+sep_str: '\n'
+
 # Define the root workspace directory
 # can be used for kubernetes
 workspace: /home/top321902/code/intro_dl/term_project

@@ -13,11 +13,10 @@ def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
 
     os.makedirs(cfg.artifacts_dir, exist_ok=True)
-    if cfg.artifact_name is not None:
-        train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
-    else:
+    if cfg.artifact_name is  None:
         now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        train_artifacts_dir = os.path.join(cfg.artifacts_dir, f"train-{now}")
+        cfg.artifact_name = f"train-{now}"
+    train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
     
     os.makedirs(train_artifacts_dir, exist_ok=True)
     OmegaConf.save(config=cfg, f=os.path.join(train_artifacts_dir, "config.yaml"))
@@ -32,12 +31,8 @@ def main(cfg: DictConfig):
     msg.good(f"Validation dataset size: {len(val_dataset)} ({100 * cfg.dataset.val_ratio:.2f}% of total)")
 
     msg.info("Initializing model...")
-    model_config = OmegaConf.to_container(cfg.model, resolve=True)
     solver = ARCSolver(
-        # token=cfg.token, # TODO
-        train_artifacts_dir=train_artifacts_dir,
-        cache_dir=cfg.cache_dir,
-        **model_config,
+        config_path=os.path.join(train_artifacts_dir, "config.yaml"),
     )
     msg.good(f"Model: {solver.model_id}, Lora Rank: {cfg.model.lora_rank}")
 

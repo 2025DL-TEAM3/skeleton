@@ -175,6 +175,9 @@ def stringify_grid(grid: Grid) -> str:
 def gridify_grid(grid: str) -> Grid:
     return [[int(cell) for cell in row.split()] for row in grid.strip().split("\n")]
 
+# def gridify_grid(grid: str) -> Grid:
+#     return [list(map(int, str(row))) for row in grid.strip().split("\n")]
+
 def format_prompt_messages(datapoint: DataPointDict) -> list[ChatEntry]:
     train_examples = datapoint["train"]
     test_input = datapoint["test"][0]["input"] # TODO : for now, use only the first one
@@ -221,3 +224,10 @@ def create_n_minus_1_dataset(examples: List[ExampleDict]) -> List[DataPointDict]
         }
         new_dataset.append(new_example)
     return new_dataset
+
+def print_grid(grid: Grid):
+    for i, row in enumerate(grid):
+        prefix = "[[" if i == 0 else " ["
+        suffix = "]]" if i == len(grid) - 1 else "]"
+        print(prefix + " ".join(str(cell) for cell in row) + suffix)
+    print()

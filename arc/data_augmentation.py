@@ -29,7 +29,7 @@ def _get_grid_augmentation_map() -> dict[str,tuple[Callable[[Grid], Grid], Calla
         "mirror": (mirror, get_random_mirror_params),
     }
 
-def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test: bool = True) -> DataPointDict:
+def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test: bool = True) -> tuple[DataPointDict, dict]:
     """Same augmentation for every grid"""
     augmentations_names = ["geometric", "color"]
     params_map = dict()
@@ -50,7 +50,7 @@ def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test:
 
     if swap_train_and_test:
         augmented_datapoint = random_swap_train_and_test(augmented_datapoint)
-    return augmented_datapoint
+    return augmented_datapoint, params_map
 
 def revesre_datapoint_augmentation(datapoint: DataPointDict, params_map: dict) -> DataPointDict:
     augmentation_names = list(params_map.keys())

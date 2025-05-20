@@ -1,5 +1,5 @@
 predict:
-  # will be loaded from ${workspace}/skeleton/artifacts/${train_name}/${checkpoint_name}
-  checkpoint_name: "checkpoint-final"
+  checkpoint_path: ${artifacts_dir}/train-baseline-qwen4b-r8/checkpoints/checkpoint-7500
   enable_ttt: true
-  enable_thinking: false
+  use_data_augmentation_for_eval: false
+  num_augmentations: 5

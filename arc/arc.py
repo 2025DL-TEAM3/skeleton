@@ -1,5 +1,7 @@
-import os, glob, json, time, random, copy, gc
+import os, glob, json, time, random, copy, gc, datetime, traceback
 from wasabi import msg
+from omegaconf import DictConfig, OmegaConf
+import numpy as np
 
 from trl import SFTTrainer, SFTConfig
 from transformers import GenerationConfig, TrainingArguments, EarlyStoppingCallback
@@ -15,26 +17,41 @@ from transformers import (
     PreTrainedTokenizer,
     PreTrainedModel,
 )
-from peft import LoraConfig
+from peft import LoraConfig, PeftModel
 
-from . import arc_utils, data_transform
+from . import arc_utils, data_transform, data_augmentation
 from .datatypes import *
+
+def load_config(config_path: str) -> DictConfig:
+    cfg = OmegaConf.load(config_path)
+    
+    if cfg.artifact_name is  None:
+        now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        cfg.artifact_name = f"train-{now}"
+    train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
+    
+    os.makedirs(train_artifacts_dir, exist_ok=True)
+    cfg.train_artifacts_dir = train_artifacts_dir
+    
+    return cfg
 
 class ARCSolver:
     def __init__(
         self, 
-        token: str | None = None,
-        
-        train_artifacts_dir: str | None = None,
-        sep_str: str = "\n",
-        cache_dir: str | None = None,
-        
-        model_id: str = "Qwen/Qwen3-4B",
-        lora_rank: int = 8,
-        lora_alpha: int = 16,
-        target_modules: list[str] = None,
-        use_custom_head: bool = False,
+        token: str = None,
+        config_path: str = "artifacts/config.yaml",
     ):
+        cfg = load_config(config_path)
+        train_artifacts_dir = cfg.train_artifacts_dir
+        cache_dir = cfg.cache_dir
+        sep_str = cfg.sep_str
+        model_id = cfg.model.model_id
+        use_custom_head = cfg.model.use_custom_head
+        lora_rank = cfg.model.lora_rank
+        lora_alpha = cfg.model.lora_alpha
+        target_modules = cfg.model.target_modules
+        
+        
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
 
@@ -121,6 +138,11 @@ class ARCSolver:
         
         self.enable_ttt = False
         
+        self.generation_config = GenerationConfig(
+            max_new_tokens=1024,
+            do_sample=True,   
+        )
+        
         
     def parse_grid(self, ids: List[int]) -> Grid:
         decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
@@ -201,19 +223,123 @@ class ARCSolver:
         examples: List[ExampleDict], 
         questions_input: Grid
     ) -> Grid:
-        return [[0, 0]] # TODO
+        if self.enable_ttt:
+            self.test_time_training(examples)
+        
+        datapoint = {
+            "train": examples,
+            "test": [
+                {
+                    "input": questions_input,
+                    "output": None,
+                }
+            ],
+        }
+        
+        if not self.use_data_augmentation_for_eval or self.num_augmentations < 1:
+            inferred_grid = self._predict_grid(datapoint)
+            return inferred_grid
+        
+        augmented_datapoints_and_params_map = [
+            data_augmentation.random_datapoint_augmentation(datapoint, swap_train_and_test=False)
+            for _ in range(self.num_augmentations)
+        ]
+        
+        # run inference on augmented datapoints
+        inferred_grids = [
+            self._predict_grid(aug_dp_and_pm[0])
+            for aug_dp_and_pm in augmented_datapoints_and_params_map
+        ]
+        
+        for (augmented_datapoint, _), inferred_grid in zip(augmented_datapoints_and_params_map, inferred_grids):
+            augmented_datapoint["test"][0]["output"] = inferred_grid
+        
+        # reverse the augmented datapoints
+        reversed_datapoints = [
+            data_augmentation.revesre_datapoint_augmentation(aug_dp_and_pm[0], aug_dp_and_pm[1])
+            for aug_dp_and_pm in augmented_datapoints_and_params_map
+        ]
+        
+        final_grid = self._select_best_grid(reversed_datapoints)
+        return final_grid
+
+    def _predict_grid(self, datapoint: DataPointDict) -> Grid:
+        prompt_messages = arc_utils.format_prompt_messages(datapoint)
+        prompt_str = self.tokenizer.apply_chat_template(
+            prompt_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            continue_final_message=False,
+            enable_thinking=False,
+        )
+        
+        model_inputs = self.tokenizer(
+            text=prompt_str,
+            add_special_tokens=False,
+            return_tensors="pt",
+        ).to(self.device)
+        
+        with torch.no_grad():
+            output_ids = self.base_model.generate(
+                **model_inputs,
+                generation_config=self.generation_config,
+            ).squeeze(0).cpu()
+            output_ids = output_ids[len(model_inputs["input_ids"][0]):].tolist()
+            
+            train_input = np.array(datapoint['train'][0]['input'])
+            train_output = np.array(datapoint['train'][0]['output'])
+            test_input = np.array(datapoint['test'][0]['input'])
+            
+            if train_input.shape == train_output.shape:
+                x, y = test_input.shape
+            else:
+                x = (train_output.shape[0] * test_input.shape[0] // train_input.shape[0])
+                y = (train_output.shape[1] * test_input.shape[1] // train_input.shape[1])
+            
+            try:
+                parsed_grid = self.parse_grid(output_ids)
+                grid = np.array(parsed_grid)
+                # grid = grid[:x, :y]
+                
+            except Exception as e:
+                print(f"Error parsing grid, using random grid")
+                print("Parsed grid:")
+                arc_utils.print_grid(parsed_grid)
+                print("Output ids:")
+                print(output_ids)
+                traceback.print_exc()
+                grid = np.random.randint(0, 10, (x, y))
+
+            return grid
 
 
     def prepare_evaluation(
         self,
-        checkpoint_name: str = "checkpoint-final",
-        enable_ttt: bool = False,
-        enable_thinking: bool = False,
+        checkpoint_path: str = "artifacts/checkpoint-final",
+        enable_ttt: bool = True,
+        use_data_augmentation_for_eval: bool = True,
+        num_augmentations: int = 5,
     ):
         """
         Load pretrained weight, make model eval mode, etc.
         """
-        pass # TODO
+        self.enable_ttt = enable_ttt
+        self.use_data_augmentation_for_eval = use_data_augmentation_for_eval
+        self.num_augmentations = num_augmentations
+        
+        try:
+            # Note: checkpoint config should be match with the model config used in intialization
+            self.peft_model = PeftModel.from_pretrained(
+                self.base_model,
+                checkpoint_path, 
+                is_trainable=enable_ttt,
+            )
+            print("Loaded LoRA adapter and tokenizer from checkpoint.")
+            self.peft_model.eval()
+        except Exception as e:
+            print(f"No LoRA adapter found or incompatible: {e}")
+            traceback.print_exc()
+            raise e
 
 if __name__ == "__main__":
     solver = ARCSolver()
