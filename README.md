@@ -109,6 +109,11 @@ prompt_completion_pair = {
         'content': '34\n56\n'
     }
 }
+
+formatted_prompt_completion_pair = {
+    'prompt': "<|im_start|>user\nYou're a smart puzzle solver ... Test Input: 12\n34\n<|im_end|><|im_start>assistant"
+    'completion': "<think></think>34\n56\n<|im_end>"
+}
 ```
 
 ### `DataTransform` class

@@ -146,21 +146,25 @@ class ARCSolver:
         
         
     def parse_grid(self, ids: List[int]) -> Grid:
-        grid = []
-        row = []
-        inv_map = {k: i for i, k in enumerate(self.pixel_ids)}
+        # grid = []
+        # row = []
+        # inv_map = {k: i for i, k in enumerate(self.pixel_ids)}
         
-        for idx in ids:
-            if idx == self.sep_token_id:
-                if len(row) > 0:
-                    grid.append(row.copy())
-                    row.clear()
-            else:
-                if idx == self.tokenizer.eos_token_id:
-                    break
-                row.append(inv_map.get(idx, 0))
-        if len(row) > 0:
-            grid.append(row)
+        # for idx in ids:
+        #     if idx == self.sep_token_id:
+        #         if len(row) > 0:
+        #             grid.append(row.copy())
+        #             row.clear()
+        #     else:
+        #         if idx == self.tokenizer.eos_token_id:
+        #             break
+        #         row.append(inv_map.get(idx, 0))
+        # if len(row) > 0:
+        #     grid.append(row)
+        # return grid
+        decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
+        print(f"Decoded: {decoded}")
+        grid = arc_utils.gridify_grid(decoded)
         return grid
 
     def train(
