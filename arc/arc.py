@@ -32,8 +32,8 @@ def load_config(config_path: str) -> DictConfig:
     
     os.makedirs(train_artifacts_dir, exist_ok=True)
     cfg.train_artifacts_dir = train_artifacts_dir
-    
-    return cfg
+    cfg_dict = OmegaConf.to_container(cfg, resolve=True)
+    return cfg_dict
 
 class ARCSolver:
     def __init__(
@@ -42,14 +42,14 @@ class ARCSolver:
         config_path: str = "artifacts/config.yaml",
     ):
         cfg = load_config(config_path)
-        train_artifacts_dir = cfg.train_artifacts_dir
-        cache_dir = cfg.cache_dir
-        sep_str = cfg.sep_str
-        model_id = cfg.model.model_id
-        use_custom_head = cfg.model.use_custom_head
-        lora_rank = cfg.model.lora_rank
-        lora_alpha = cfg.model.lora_alpha
-        target_modules = cfg.model.target_modules
+        train_artifacts_dir = cfg.get("train_artifacts_dir", None)
+        cache_dir = cfg.get("cache_dir", None)
+        sep_str = cfg.get("sep_str", "\n")
+        model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B")
+        use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
+        lora_rank = cfg.get("model", {}).get("lora_rank", 16)
+        lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
+        target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
         
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
