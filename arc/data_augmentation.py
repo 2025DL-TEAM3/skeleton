@@ -208,13 +208,13 @@ def get_random_padding_params(
         safe_max_padding = min(safe_max_padding)
         if safe_max_padding < 1:
             print("Warning: Grid is too large to add padding.")
-            return (0, 0), (0, 0)
+            return dict(color=0, size=(0,0))
         size = random.randint(1, safe_max_padding)
         size = (size, size)
     else:
         if min(safe_max_padding) < 1:
             print("Warning: Grid is too large to add padding.")
-            return (0, 0), (0, 0)
+            return dict(color=0, size=(0,0))
         for _ in range(n_tries):
             size = (random.randint(1, safe_max_padding[0]), random.randint(1, safe_max_padding[1]))
             if size[0] != size[1]:
@@ -246,7 +246,7 @@ def mirror(grid: Grid, axis: Literal["horizontal", "vertical"] | None = None, po
 def get_random_mirror_params(max_grid_shape: tuple[int, int]):
     if MAX_GRID_SIZE // max_grid_shape[0] < 2:
         if MAX_GRID_SIZE // max_grid_shape[1] < 2:
-            print("Warning: Grid is too large to add padding.")
+            print("Warning: Grid is too large to mirror.")
             axis = None
         else:
             axis = 'vertical'

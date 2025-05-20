@@ -29,4 +29,4 @@ train:
   patience: 3
   metric_for_best_model: "eval_loss"
   greater_is_better: false
-  load_best_model_at_end: true
+  # load_best_model_at_end: true
