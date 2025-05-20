@@ -5,8 +5,8 @@ from datasets import Dataset as HFDataset
 
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
-from myarc import ARCSolver
-from myarc.arc_dataset import build_train_val_dataset
+from arc import ARCSolver
+from arc.arc_dataset import build_train_val_dataset
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.3")
 def main(cfg: DictConfig):

@@ -306,6 +306,14 @@ class ARCSFTTrainer:
                     self.model.train()
                 
                 del batch_device, loss
+                if global_step % 1000 == 0:
+                    self.save_model(
+                        os.path.join(self.args.output_dir, f"checkpoint-{epoch + 1}-{global_step}"),
+                        optimizer,
+                        scheduler,
+                        epoch + 1,
+                        global_step,
+                    )
             
             self.save_model(
                 os.path.join(self.args.output_dir, f"checkpoint-{epoch + 1}"),
@@ -351,8 +359,11 @@ class ARCSFTTrainer:
         self.model.eval()
         total_loss = 0.0
         dataloader = self._get_eval_dataloader()
+        max_task = 10
         with torch.no_grad():
             for step, batch in enumerate(dataloader):
+                if step >= max_task:
+                    break
                 batch_device = {k: v.to(self.model.device) for k, v in batch.items()}
                 loss = self.compute_loss(self.model, batch_device)
                 total_loss += loss.item()
@@ -365,8 +376,8 @@ class ARCSFTTrainer:
                     )
                 
                 del batch_device, loss
-        avg_loss = total_loss / len(dataloader)
-        self.log(f"Average validation loss: {avg_loss:.4f}", type="print")
+        avg_loss = total_loss / max_task
+        self.log(f"Average validation loss: {avg_loss:.4f}")
         return avg_loss
     
     def _get_train_dataloader(self):

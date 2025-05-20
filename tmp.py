@@ -18,7 +18,7 @@ sample_datapoint = {
     ]
 }
 
-from myarc import data_augmentation
+from arc import data_augmentation
 
 def _print_grid(grid):
     for row in grid:
@@ -42,7 +42,7 @@ def _print_datapoint(datapoint):
 
 
 from pprint import pprint
-from myarc import data_transform
+from arc import data_transform
 print("Original Datapoint:")
 _print_datapoint(sample_datapoint)
 

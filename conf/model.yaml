@@ -1,5 +1,7 @@
 model:
   model_id: Qwen/Qwen3-0.6B
-  lora_rank: 32
-  lora_alpha: 64
-  enable_gradient_checkpointing: true
+  lora_rank: 16
+  lora_alpha: 32
+  enable_gradient_checkpointing: false
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head", "embed_tokens"]
+  use_custom_head: true

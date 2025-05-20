@@ -43,6 +43,8 @@ class ARCSolver:
         cache_dir: str | None = None,
         lora_rank: int = 8,
         lora_alpha: int = 16,
+        target_modules: list[str] = None,
+        use_custom_head: bool = False,
     ):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -70,6 +72,7 @@ class ARCSolver:
             "torch_dtype": torch.float16,  # Set the data type for the model
             "use_cache": False,  # Disable caching to save memory
             "token": token,
+            "tie_word_embeddings": not use_custom_head,
             # "device_map": "auto",  # Automatically map the model to available devices
         }
         if cache_dir is not None:
@@ -80,16 +83,43 @@ class ARCSolver:
             print("No cache dir found, using default cache location.")
             self.cache_dir = None
         
+        # Load tokenizer first so it's available for model optimization
+        tokenizer_args = {
+            "pretrained_model_name_or_path": model_id,
+            "token": token,
+        }
+        if cache_dir:
+            tokenizer_args["cache_dir"] = cache_dir
+        self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
+        self.tokenizer.bos_token_id = 151643 # Default for Qwen3
+        
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
         ).to(self.device)
+        self.enable_thinking = False
+
+        # Optimize model vocabulary for ARC tasks if enabled
+        if use_custom_head:
+            from .custom_head import apply_custom_head
+            # Only keep necessary tokens (digits, thinking tokens, special tokens)
+            apply_custom_head(self.base_model, self.tokenizer, keep_digits=True, keep_thinking_tokens=True)
+            print(f"✓ Model vocabulary optimization applied")
+        else:
+            print("Model vocabulary optimization skipped.")
+
+        
+        # Use default target modules if none provided
+        if target_modules is None:
+            # Include lm_head and embeddings for training with LoRA
+            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head", "embed_tokens"]
+            
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
             r=lora_rank, 
             lora_alpha=lora_alpha,  
             lora_dropout=0.1,
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+            target_modules=target_modules,
             bias="none",
         )
         self.peft_model = None
@@ -101,14 +131,8 @@ class ARCSolver:
             if hasattr(self.base_model, "enable_input_require_grads"):
                 self.base_model.enable_input_require_grads()
 
-        tokenizer_args = {
-            "pretrained_model_name_or_path": model_id,
-            "token": token,
-        }
-        if cache_dir:
-            tokenizer_args["cache_dir"] = cache_dir
-        self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
-        self.tokenizer.bos_token_id = 151643 # Default for Qwen3
+        # Tokenizer is already loaded above
+        # Initialize other properties
         self.enable_thinking = False
 
         self.pixel_ids = [

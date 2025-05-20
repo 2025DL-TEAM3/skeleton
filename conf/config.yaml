@@ -8,13 +8,13 @@ defaults:
 
 # Define the root workspace directory
 # can be used for kubernetes
-workspace: /home/top321902/code/intro_dl/term_project
+workspace: /home/student/workspace
 cache_dir: null
 
 # Paths based on workspace
 dataset_dir: ${workspace}/dataset
 artifacts_dir: ${workspace}/skeleton/artifacts
-evaluation_dir: ${workspace}/skeleton/evaluation
+evaluation_dir: ${workspace}/evaluation
 
 # name of the training e.g. qwen4b-rank8
 # all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}

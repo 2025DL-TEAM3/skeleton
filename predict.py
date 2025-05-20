@@ -12,8 +12,8 @@ import glob
 import json
 import random
 
-from myarc import ARCSolver
-from myarc import arc_utils
+from arc import ARCSolver
+from arc import arc_utils
 
 def shape_accuracy(prediction, ground_truth):
     """
@@ -88,10 +88,13 @@ def visualize_example(task_id, test_input, ground_truth, prediction):
 
 def evaluate(cfg: DictConfig):
     train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
+    model_config = OmegaConf.to_container(cfg.model, resolve=True)
 
     solver = ARCSolver(
         # token=args.token, # TODO
         train_artifacts_dir=train_artifacts_dir,
+        cache_dir=cfg.cache_dir,
+        **model_config,
     )
     solver.prepare_evaluation(
         checkpoint_name=cfg.predict.checkpoint_name,

@@ -241,9 +241,6 @@ class ARCTrainDataset(Dataset):
             task,
             num_samples=self.num_train_examples_per_normal_task + 1, # 1 for test
         )
-        # prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-
-        # return prompt_completion_pair
         
         if self.transform:
             any_type_datapoint = self.transform(datapoint)
@@ -295,8 +292,6 @@ class ARCValidationDataset(Dataset):
                     task,
                     num_samples=self.num_train_examples_per_normal_task + 1, # 1 for test
                 )
-                # prompt_completion_pair = arc_utils.datapoint_to_prompt_completion_pair(datapoint)
-                # validation_datapoints.append(prompt_completion_pair)
                 validation_datapoints.append(datapoint)
         
         random.seed()
