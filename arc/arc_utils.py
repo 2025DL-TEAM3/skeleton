@@ -170,10 +170,10 @@ def datapoint_to_prompt_completion_pair(
     }
 
 def stringify_grid(grid: Grid) -> str:
-    return "\n".join("".join(str(cell) for cell in row) for row in grid)
+    return "\n".join(" ".join(str(cell) for cell in row) for row in grid)
 
 def gridify_grid(grid: str) -> Grid:
-    return [list(map(int, row)) for row in grid.split("\n") if row.strip()]
+    return [[int(cell) for cell in row.split()] for row in grid.strip().split("\n")]
 
 def format_prompt_messages(datapoint: DataPointDict) -> list[ChatEntry]:
     train_examples = datapoint["train"]

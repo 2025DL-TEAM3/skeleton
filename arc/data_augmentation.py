@@ -1,5 +1,6 @@
 ### Copied from https://github.com/ironbar/arc24/blob/main/scripts/arc24/data_augmentation.py
 from pprint import pprint
+from copy import deepcopy
 import random
 import numpy as np
 from typing import Literal, Callable
@@ -12,11 +13,6 @@ MAX_GRID_SIZE = 30 # 10 is for original, 30 for augmented
 def set_random_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
-
-def _print_grid(grid: Grid):
-    for row in grid:
-        print(" ".join(str(cell) for cell in row))
-    print()
 
 def get_max_grid_shape(datapoint: DataPointDict) -> tuple[int, int]:
     max_rows = max(len(example['input']) for example in datapoint['train'])
@@ -47,7 +43,7 @@ def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test:
             grid = func(grid, **kwargs)
         return grid
     
-    augmented_datapoint = datapoint.copy()
+    augmented_datapoint = deepcopy(datapoint)
     augmented_datapoint['train'] = [_augment_example_dict(example, augment) for example in datapoint['train']]
     augmented_datapoint['test'] = [_augment_example_dict(example, augment) for example in datapoint['test']]
 
@@ -76,7 +72,7 @@ def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
         grid = func(grid, **kwargs)
         return grid
     
-    augmented_datapoint = datapoint.copy()
+    augmented_datapoint = deepcopy(datapoint)
     augmented_datapoint['train'] = [_augment_example_dict(example, augment, [target]) for example in datapoint['train']]
     augmented_datapoint['test'] = [_augment_example_dict(example, augment, [target]) for example in datapoint['test']]
     
@@ -84,7 +80,7 @@ def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
     return augmented_datapoint
 
 def _augment_example_dict(example: ExampleDict, augment: Callable[[Grid], Grid], targets: List[Literal["input", "output"]] = None) -> ExampleDict:
-    augmented_example = example.copy()
+    augmented_example = deepcopy(example)
     if targets is None:
         targets = ['input', 'output']
     
@@ -99,12 +95,12 @@ def _augment_example_dict(example: ExampleDict, augment: Callable[[Grid], Grid],
 def permute_train_examples(datapoint: DataPointDict) -> DataPointDict:
     train_order = np.arange(len(datapoint['train']))
     np.random.shuffle(train_order)
-    augmented_datapoint = datapoint.copy()
+    augmented_datapoint = deepcopy(datapoint)
     augmented_datapoint['train'] = [datapoint['train'][i] for i in train_order]
     return augmented_datapoint
 
 def random_swap_train_and_test(datapoint: DataPointDict) -> DataPointDict:
-    augmented_datapoint = datapoint.copy()
+    augmented_datapoint = deepcopy(datapoint)
     all_examples = augmented_datapoint['train'] + augmented_datapoint['test']
     random.shuffle(all_examples)
     train_size = len(augmented_datapoint['train'])
@@ -205,11 +201,11 @@ def get_random_padding_params(
     )
     
     if random.random() < same_size_probability:
-        safe_max_padding = min(safe_max_padding)
-        if safe_max_padding < 1:
+        pad_limit = min(safe_max_padding)
+        if pad_limit < 1:
             print("Warning: Grid is too large to add padding.")
             return dict(color=0, size=(0,0))
-        size = random.randint(1, safe_max_padding)
+        size = random.randint(1, pad_limit)
         size = (size, size)
     else:
         if min(safe_max_padding) < 1:
