@@ -15,8 +15,9 @@ def set_random_seed(seed: int):
     np.random.seed(seed)
 
 def get_max_grid_shape(datapoint: DataPointDict) -> tuple[int, int]:
-    max_rows = max(len(example['input']) for example in datapoint['train'])
-    max_cols = max(len(example['input'][0]) for example in datapoint['train'])
+    all_inputs = [ex['input'] for ex in datapoint['train']] + [ex['input'] for ex in datapoint['test']]
+    max_rows = max(len(g) for g in all_inputs)
+    max_cols = max(len(g[0]) for g in all_inputs)
     return max_rows, max_cols
 
 def _get_grid_augmentation_map() -> dict[str,tuple[Callable[[Grid], Grid], Callable]]:
@@ -50,6 +51,28 @@ def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test:
     if swap_train_and_test:
         augmented_datapoint = random_swap_train_and_test(augmented_datapoint)
     return augmented_datapoint
+
+def revesre_datapoint_augmentation(datapoint: DataPointDict, params_map: dict) -> DataPointDict:
+    augmentation_names = list(params_map.keys())
+    
+    def reverse_augment(grid: Grid) -> Grid:
+        for aug_name in augmentation_names:
+            _, kwargs = params_map[aug_name]
+            
+            reverse_func = None
+            if aug_name == "geometric":
+                reverse_func = reverse_geometric_augmentation
+            elif aug_name == "color":
+                reverse_func = reverse_color_permutation
+            else:
+                raise ValueError(f"Unknown augmentation: {aug_name}")
+            grid = reverse_func(grid, **kwargs)
+        return grid
+
+    reversed_datapoint = deepcopy(datapoint)
+    reversed_datapoint['train'] = [_augment_example_dict(example, reverse_augment) for example in datapoint['train']]
+    reversed_datapoint['test'] = [_augment_example_dict(example, reverse_augment) for example in datapoint['test']]
+    return reversed_datapoint
 
 def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
     """Augment only one of input/output grids, resulting in different task"""
@@ -87,6 +110,9 @@ def _augment_example_dict(example: ExampleDict, augment: Callable[[Grid], Grid],
     for target in targets:
         if target not in example:
             raise ValueError(f"Target '{target}' not found in example.")
+        if example.get(target) is None:
+            continue
+        
         augmented_example[target] = augment(example[target])
 
     return augmented_example
@@ -96,7 +122,7 @@ def permute_train_examples(datapoint: DataPointDict) -> DataPointDict:
     train_order = np.arange(len(datapoint['train']))
     np.random.shuffle(train_order)
     augmented_datapoint = deepcopy(datapoint)
-    augmented_datapoint['train'] = [datapoint['train'][i] for i in train_order]
+    augmented_datapoint['train'] = [deepcopy(datapoint['train'][i]) for i in train_order]
     return augmented_datapoint
 
 def random_swap_train_and_test(datapoint: DataPointDict) -> DataPointDict:
@@ -118,6 +144,15 @@ def color_permutation(grid: Grid, color_map: dict[int, int]) -> Grid:
     grid_np = lookup_table[grid_np]
     return grid_np.tolist()
 
+def reverse_color_permutation(grid: Grid, color_map: dict[int, int]) -> Grid:
+    grid_np = np.array(grid, dtype=np.int16)
+    
+    lookup_table = np.arange(10, dtype=np.int16)
+    for old_color, new_color in color_map.items():
+        lookup_table[new_color] = old_color
+    grid_np = lookup_table[grid_np]
+    return grid_np.tolist()
+
 def get_random_color_permutation_params(change_background_probability: float = 0.1):
     colors = list(range(10))
     if random.random() < change_background_probability:
@@ -136,6 +171,14 @@ def geometric_augmentation(grid: Grid, hflip: bool = True, n_rotations_90: int =
     if hflip:
         grid_np = np.flip(grid_np, axis=1)
     grid_np = np.rot90(grid_np, k=n_rotations_90)
+    return grid_np.tolist()
+
+def reverse_geometric_augmentation(grid: Grid, hflip: bool = True, n_rotations_90: int = 0) -> Grid:
+    grid_np = np.array(grid)
+    if n_rotations_90 > 0:
+        grid_np = np.rot90(grid_np, k=-n_rotations_90)
+    if hflip:
+        grid_np = np.flip(grid_np, axis=1)
     return grid_np.tolist()
 
 def get_random_geometric_augmentation_params():
@@ -215,12 +258,12 @@ def get_random_padding_params(
             size = (random.randint(1, safe_max_padding[0]), random.randint(1, safe_max_padding[1]))
             if size[0] != size[1]:
                 break
-    color = random.randint(1, MAX_GRID_SIZE - 1)
+    color = random.randint(0, 9)
     return dict(color=color, size=size)
 
 def mirror(grid: Grid, axis: Literal["horizontal", "vertical"] | None = None, position: int = 0) -> Grid:
     if axis is None:
-        return grid
+        return deepcopy(grid)
     
     grid_np = np.array(grid)
     if axis == 'horizontal':
