@@ -1,28 +1,32 @@
 train:
-  use_trl_sfttrainer: false
+  use_data_augmentation: false
 
-  num_epochs: 5
-  patience: 5
-  learning_rate: 5e-5
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
   gradient_accumulation_steps: 4
-  batch_size: 1
-  eval_batch_size: 1
-  use_task_batch_sampler: false
-  warmup_ratio: 0.05
-  resume_from_checkpoint: null
+  gradient_checkpointing: false
 
-  # for now, customized trainer uses fixed optimizer(paged_adamw_8bit) and scheduler(linear)
-  optimizer: paged_adamw_8bit
-  lr_scheduler_type: linear
+  eval_strategy: "steps"
+  eval_steps: 10000
+  logging_strategy: "steps"
+  logging_steps: 100
+  report_to: "none"
+  save_strategy: "steps"
+  save_steps: 500
+  save_total_limit: 3
+
+  optim: "paged_adamw_8bit"
+  learning_rate: 5e-5
   max_grad_norm: 1.0
+  lr_scheduler_type: "linear"
+  warmup_ratio: 0.05
 
   fp16: true
 
-  # Do not change for now
-  eval_strategy: "steps"
-  eval_steps: 1000
-  save_strategy: "epoch"
-  logging_strategy: "steps"
-  logging_steps: 10
+  resume_from_checkpoint: null
 
-  use_data_augmentation: true
+  patience: 3
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  load_best_model_at_end: true

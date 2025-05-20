@@ -3,4 +3,3 @@ dataset:
   num_datapoints_per_task: 50
   val_ratio: 0.05
   seed: 1234
-  dataset_type: "pt" # "pt" or "hf"
