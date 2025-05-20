@@ -71,7 +71,7 @@ def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
     
     def augment(grid: Grid) -> Grid:
         # choose only one of the augmentations
-        aug_name = random.choice(augmentations_names)
+        aug_name = random.choice(list(augmentations_names))
         func, kwargs = params_map[aug_name]
         grid = func(grid, **kwargs)
         return grid
