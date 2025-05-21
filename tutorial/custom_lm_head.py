@@ -18,6 +18,7 @@ from transformers import (
     PreTrainedModel,
 )
 from peft import LoraConfig, PeftModel
+from pprint import pprint
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -60,55 +61,59 @@ base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
     **model_args,
 ).to(device)
 
-keep_tok = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.:,;*+/-=') + ['\n']
+print("Old Base model vocab size:", base_model.config.vocab_size)
+apply_custom_head(base_model, tokenizer)
 
-# keep_single_char_tokens(model=base_model, tokenizer=tokenizer, keep_tokens=keep_tok, keep_special=True, remove_unk=True)
 
-def tok_to_ids_1(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-    """
-    Convert a list of tokens to their corresponding IDs using the tokenizer.
-    """
-    ids = []
-    for tok in keep_tok:
-        tok_tokenized = tokenizer.tokenize(tok)[0]
-        if tok != tok_tokenized:
-            print(f"Warning: {tok} is not the same as {tok_tokenized}")
-        tok_id = tokenizer.convert_tokens_to_ids(tok_tokenized)
-        if tok_id != tokenizer.unk_token_id:
-            ids.append(tok_id)
-    return ids
+# check base model vocab size
+print("Base model vocab size:", base_model.config.vocab_size)
+# check base model 
 
-def tok_to_ids_2(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-    ids = []
-    for tok in keep_tok:
-        tok_id = tokenizer.encode(tok, add_special_tokens=False)[0]
-        if tok_id != tokenizer.unk_token_id:
-            ids.append(tok_id)
-    return ids
+# def tok_to_ids_1(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
+#     """
+#     Convert a list of tokens to their corresponding IDs using the tokenizer.
+#     """
+#     ids = []
+#     for tok in keep_tok:
+#         tok_tokenized = tokenizer.tokenize(tok)[0]
+#         if tok != tok_tokenized:
+#             print(f"Warning: {tok} is not the same as {tok_tokenized}")
+#         tok_id = tokenizer.convert_tokens_to_ids(tok_tokenized)
+#         if tok_id != tokenizer.unk_token_id:
+#             ids.append(tok_id)
+#     return ids
 
-def tok_to_ids_3(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-    ids = []
-    for tok in keep_tok:
-        tok_id = tokenizer(tok, add_special_tokens=False).input_ids[0]
-        if tok_id != tokenizer.unk_token_id:
-            ids.append(tok_id)
-    return ids
+# def tok_to_ids_2(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
+#     ids = []
+#     for tok in keep_tok:
+#         tok_id = tokenizer.encode(tok, add_special_tokens=False)[0]
+#         if tok_id != tokenizer.unk_token_id:
+#             ids.append(tok_id)
+#     return ids
 
-def tok_to_ids_4(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-    ids = []
-    for tok in keep_tok:
-        tokenized = tokenizer.tokenize(tok)[0]
-        tok_id = tokenizer.get_vocab()[tokenized]
-        if tok_id != tokenizer.unk_token_id:
-            ids.append(tok_id)
-    return ids
+# def tok_to_ids_3(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
+#     ids = []
+#     for tok in keep_tok:
+#         tok_id = tokenizer(tok, add_special_tokens=False).input_ids[0]
+#         if tok_id != tokenizer.unk_token_id:
+#             ids.append(tok_id)
+#     return ids
 
-print("keep_tok", keep_tok)
-ids1 = sorted(tok_to_ids_1(keep_tok, tokenizer))
-print("ids1", ids1)
-ids2 = sorted(tok_to_ids_2(keep_tok, tokenizer))
-print("ids2", ids2)
-ids3 = sorted(tok_to_ids_3(keep_tok, tokenizer))
-print("ids3", ids3)
-ids4 = sorted(tok_to_ids_4(keep_tok, tokenizer))
-print("ids4", ids4)
+# def tok_to_ids_4(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
+#     ids = []
+#     for tok in keep_tok:
+#         tokenized = tokenizer.tokenize(tok)[0]
+#         tok_id = tokenizer.get_vocab()[tokenized]
+#         if tok_id != tokenizer.unk_token_id:
+#             ids.append(tok_id)
+#     return ids
+
+# print("keep_tok", keep_tok)
+# ids1 = sorted(tok_to_ids_1(keep_tok, tokenizer))
+# print("ids1", ids1)
+# ids2 = sorted(tok_to_ids_2(keep_tok, tokenizer))
+# print("ids2", ids2)
+# ids3 = sorted(tok_to_ids_3(keep_tok, tokenizer))
+# print("ids3", ids3)
+# ids4 = sorted(tok_to_ids_4(keep_tok, tokenizer))
+# print("ids4", ids4)

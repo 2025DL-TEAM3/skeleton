@@ -102,12 +102,13 @@ class ARCSolver:
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
         ).to(self.device)
+        print(f"✓ Model loaded: {self.model_id}")
 
         # Optimize model vocabulary for ARC tasks if enabled
         if use_custom_head:
             from .custom_head import apply_custom_head
             # Only keep necessary tokens (digits, thinking tokens, special tokens)
-            apply_custom_head(self.base_model, self.tokenizer, keep_digits=True, keep_thinking_tokens=True)
+            apply_custom_head(self.base_model, self.tokenizer)
             print(f"✓ Model vocabulary optimization applied")
         else:
             print("Model vocabulary optimization skipped.")
