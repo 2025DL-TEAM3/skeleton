@@ -3,3 +3,4 @@ predict:
   enable_ttt: true
   use_data_augmentation_for_eval: false
   num_augmentations: 10
+  batch_size_generation: 2

@@ -132,6 +132,7 @@ class ARCSolver:
             max_new_tokens=1024,
             do_sample=True,   
         )
+        self.batch_size_generation = 1
         
         
     def parse_grid(self, ids: List[int]) -> Grid:
@@ -255,7 +256,7 @@ class ARCSolver:
         }
         
         if not self.use_data_augmentation_for_eval or self.num_augmentations < 1:
-            inferred_grid = self._predict_grid(datapoint)
+            inferred_grid = self._predict_grid_batch([datapoint])[0]
             return inferred_grid
         
         augmented_datapoints_and_params_map = [
@@ -263,71 +264,82 @@ class ARCSolver:
             for _ in range(self.num_augmentations)
         ]
         
-        # run inference on augmented datapoints
-        inferred_grids = [
-            self._predict_grid(aug_dp_and_pm[0])
-            for aug_dp_and_pm in augmented_datapoints_and_params_map
-        ]
+        inferred_grids = []
+        batch_size = self.batch_size_generation or 1
+        for batch in arc_utils.chunked(augmented_datapoints_and_params_map, batch_size):
+            datapoints, params_maps = zip(*batch) # list[tuple[DataPointDict, dict]]
+            inferred = self._predict_grid_batch(datapoints)
+            inferred_grids.extend(
+                zip(datapoints, params_maps, inferred)
+            )
         
-        for (augmented_datapoint, _), inferred_grid in zip(augmented_datapoints_and_params_map, inferred_grids):
-            augmented_datapoint["test"][0]["output"] = inferred_grid
+        for dp, _, grid in inferred_grids:
+            dp["test"][0]["output"] = grid
         
-        # reverse the augmented datapoints
         reversed_datapoints = [
-            data_augmentation.revesre_datapoint_augmentation(aug_dp_and_pm[0], aug_dp_and_pm[1])
-            for aug_dp_and_pm in augmented_datapoints_and_params_map
+            data_augmentation.revesre_datapoint_augmentation(dp, params_map)
+            for dp, params_map, _ in inferred_grids
         ]
         
         final_grid = self._select_best_grid(reversed_datapoints)
         return final_grid
-
-    def _predict_grid(self, datapoint: DataPointDict) -> Grid:
-        prompt_messages = arc_utils.format_prompt_messages(datapoint)
-        prompt_str = self.tokenizer.apply_chat_template(
-            prompt_messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            continue_final_message=False,
-            enable_thinking=False,
-        )
+    
+    def _infer_test_shape(self, datapoint: DataPointDict) -> tuple[int, int]:
+        train_input = np.array(datapoint['train'][0]['input'])
+        train_output = np.array(datapoint['train'][0]['output'])
+        test_input = np.array(datapoint['test'][0]['input'])
+        
+        if train_input.shape == train_output.shape:
+            x, y = test_input.shape
+        else:
+            x = (train_output.shape[0] * test_input.shape[0] // train_input.shape[0])
+            y = (train_output.shape[1] * test_input.shape[1] // train_input.shape[1])
+        
+        return x, y
+    
+    def _predict_grid_batch(self, datapoints: List[DataPointDict]) -> List[Grid]:
+        prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in datapoints]
+        prompt_strs = [
+            self.tokenizer.apply_chat_template(
+                prompt_msg,
+                tokenize=False,
+                add_generation_prompt=True,
+                continue_final_message=False,
+                enable_thinking=False,
+            )
+            for prompt_msg in prompt_messages
+        ]
         
         model_inputs = self.tokenizer(
-            text=prompt_str,
+            text=prompt_strs,
             add_special_tokens=False,
             return_tensors="pt",
+            padding=True,
+            truncation=True, 
         ).to(self.device)
         
+        prompt_lens = model_inputs["input_ids"].ne(self.tokenizer.pad_token_id).long().sum(dim=1)
+        
         with torch.no_grad():
-            output_ids = self.base_model.generate(
+            output = self.base_model.generate(
                 **model_inputs,
                 generation_config=self.generation_config,
-            ).squeeze(0).cpu()
-            output_ids = output_ids[len(model_inputs["input_ids"][0]):].tolist()
-            
-            train_input = np.array(datapoint['train'][0]['input'])
-            train_output = np.array(datapoint['train'][0]['output'])
-            test_input = np.array(datapoint['test'][0]['input'])
-            
-            if train_input.shape == train_output.shape:
-                x, y = test_input.shape
-            else:
-                x = (train_output.shape[0] * test_input.shape[0] // train_input.shape[0])
-                y = (train_output.shape[1] * test_input.shape[1] // train_input.shape[1])
-            
+            ) # (batch_size, total_seq_len)
+        
+        grids = []
+        for seq, prompt_len, datapoint in zip(output, prompt_lens, datapoints):
+            new_ids = seq[prompt_len:].cpu().tolist()
             try:
-                parsed_grid = self.parse_grid(output_ids)
-                grid = np.array(parsed_grid)
-                # grid = grid[:x, :y]
-                
+                parsed_grid = self.parse_grid(new_ids)
+                grids.append(np.array(parsed_grid))
             except Exception as e:
                 print(f"Error parsing grid, using random grid")
                 print("Parsed grid:")
                 arc_utils.print_grid(parsed_grid)
                 traceback.print_exc()
-                grid = np.random.randint(0, 10, (x, y))
-
-            return grid
-
+                x, y = self._infer_test_shape(datapoint)
+                grids.append(np.random.randint(0, 10, (x, y)))
+        return grids
 
     def prepare_evaluation(
         self,
@@ -335,6 +347,7 @@ class ARCSolver:
         enable_ttt: bool = True,
         use_data_augmentation_for_eval: bool = True,
         num_augmentations: int = 5,
+        batch_size_generation: int = 1,
     ):
         """
         Load pretrained weight, make model eval mode, etc.
@@ -342,6 +355,7 @@ class ARCSolver:
         self.enable_ttt = enable_ttt
         self.use_data_augmentation_for_eval = use_data_augmentation_for_eval
         self.num_augmentations = num_augmentations
+        self.batch_size_generation = batch_size_generation
         
         try:
             # Note: checkpoint config should be match with the model config used in intialization

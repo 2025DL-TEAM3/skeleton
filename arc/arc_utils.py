@@ -1,5 +1,8 @@
 
 import os, glob, json, time, random
+from itertools import islice
+
+from typing import List, Dict, Any, Tuple, Union, Optional, Iterator
 
 from .datatypes import *
 
@@ -231,3 +234,7 @@ def print_grid(grid: Grid):
         suffix = "]]" if i == len(grid) - 1 else "]"
         print(prefix + " ".join(str(cell) for cell in row) + suffix)
     print()
+    
+def chunked(it: List, n: int) -> Iterator[List]:
+    it = iter(it)
+    return iter(lambda: list(islice(it, n)), [])
