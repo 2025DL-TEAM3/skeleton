@@ -14,6 +14,19 @@ import json
 
 from arc import arc_utils
 
+import sys
+
+class Tee:
+    def __init__(self, *files):
+        self.files = files
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()
+    def flush(self):
+        for f in self.files:
+            f.flush()
+
 def check_match(pred, truth):
     pred = np.array(pred, dtype=np.uint8)
     truth = np.array(truth, dtype=np.uint8)
@@ -89,6 +102,18 @@ def load_data(base_dir, num_samples=1000, num_workers=1):
 def main(cfg: DictConfig):
     from arc import ARCSolver
     from datasets import Dataset
+
+    artifacts_dir = cfg.artifacts_dir
+    checkpoint_path = cfg.predict.checkpoint_path
+    # rel_path = os.path.relpath(checkpoint_path, artifacts_dir)
+    # artifact_name = rel_path.split(os.sep)[0]
+    # checkpoint_name = rel_path.split(os.sep)[-1]
+    eval_name = cfg.evaluate.eval_name
+    log_file_path = os.path.join(
+        cfg.evaluation_dir, f"{cfg.evaluate.eval_name}-log.txt"
+    )
+
+    sys.stdout = sys.stderr = Tee(sys.stdout, open(log_file_path, "a"))
     
     print("--- Hydra Config ---")
     print(OmegaConf.to_yaml(cfg))
@@ -101,7 +126,7 @@ def main(cfg: DictConfig):
     msg.good(f"Loaded {len(df)} samples.")
     
     msg.info("Initializing solver...")
-    checkpoint_path = cfg.predict.checkpoint_path
+    
     pparent_dir = os.path.dirname(os.path.dirname(checkpoint_path)) # train_artifacts_dir
     config_path = os.path.join(pparent_dir, "config.yaml")
     print(f"Config path: {config_path}")

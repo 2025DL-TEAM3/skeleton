@@ -220,6 +220,30 @@ class ARCSolver:
     def test_time_training(self, examples: List[ExampleDict]):
         pass
 
+    def _select_best_grid(self, datapoint_candidates: List[DataPointDict]) -> Grid:
+        # for now, just vote for the most common grid
+        inferred_grids = [
+            datapoint["test"][0]["output"]
+            for datapoint in datapoint_candidates
+        ]
+
+        grid_counts = {}
+        for grid in inferred_grids:
+            grid_tuple = tuple(map(tuple, grid))
+            if grid_tuple in grid_counts:
+                grid_counts[grid_tuple] += 1
+            else:
+                grid_counts[grid_tuple] = 1
+        
+        # if all grides are distinct, return a random one
+        if len(grid_counts) == len(inferred_grids):
+            print("All grids are distinct, returning a random one.")
+            return random.choice(inferred_grids)
+    
+        # find the grid with the highest count
+        best_grid = max(grid_counts, key=grid_counts.get)
+        return best_grid
+
     def predict(
         self, 
         examples: List[ExampleDict], 

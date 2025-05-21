@@ -6,6 +6,13 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 from typing import Optional, Tuple, List, Dict, Any, Union, Set
 import warnings
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    PreTrainedTokenizer,
+    PreTrainedModel,
+)
 
 def get_or_map_special_tokens(data, mapping=None):
     tokens = set()
@@ -85,24 +92,37 @@ def shrink_model_embeddings(model, mapping):
                     setattr(config, k, [mapping.get(t) for t in v] if isinstance(v, list) else mapping.get(v))
 
 
-def keep_single_char_tokens(model, tokenizer, keep=None, keep_norm=False, keep_model_tok=True, **kwargs):
-    if not keep_norm:
-        remove_tokenizer_normalizer(tokenizer)  # required for some models
-    if keep is None:  # keep all single_length tokens
-        keep_indices = set(v for k, v in tokenizer.vocab.items() if len(k) == 1)
-    else:  # keep tokens that were passed
-        keep_indices = set(tokenizer.vocab[t] for t in keep)
+def keep_single_char_tokens(
+    model: PreTrainedModel, 
+    tokenizer: PreTrainedTokenizer, 
+    keep_tokens: Set[str], 
+    keep_model_tok: bool = True, 
+    **kwargs
+):
+    keep_indices = set(tokenizer.vocab[t] for t in keep_tokens)
     if keep_model_tok:  # keep tokens used by model
         for config in [model.config, model.generation_config]:
             for k, v in config.to_dict().items():
                 if k.endswith('token_id'):
                     keep_indices.update(v if isinstance(v, list) else [v])
     keep_indices -= {None}
+    print(list(keep_indices))
+    # decoded version
+    print(tokenizer.decode(list(keep_indices)))
     mapping = shrink_tokenizer_vocab(tokenizer, keep_indices, **kwargs)
     shrink_model_embeddings(model, mapping)
     return mapping
 
-def apply_custom_head(model, tokenizer, keep_digits=True, keep_thinking_tokens=True, keep_special=True):
+def apply_custom_head(model, tokenizer, keep_digits=True, keep_thinking_tokens=True):
+    # 0. take single text
+    # 1. convert to token ids (single text -> tokenized byte string -> token id)
+    # 2. shrink tokenizer vocab
+    
+    #---------------
+    # 0. take token strings
+    # 1. convert to token ids (tokenized byte string -> token id)
+    # 2. shrink tokenizer vocab
+    
     """
     Optimize the model specifically for ARC tasks by reducing the vocabulary size
     to only what's needed for ARC (digits, thinking tokens, special tokens, and prompt templates).
@@ -191,10 +211,10 @@ def apply_custom_head(model, tokenizer, keep_digits=True, keep_thinking_tokens=T
     mapping = keep_single_char_tokens(
         model, 
         tokenizer, 
-        keep=None,  # Let the function handle it based on our keep_tokens
-        keep_norm=False, 
+        keep_tokens=keep_tokens,  # Let the function handle it based on our keep_tokens
         keep_model_tok=True,
-        keep_special=keep_special
+        keep_special=True,
+        remove_unk=True
     )
     
     print(f"✓ Model vocabulary optimized for ARC: {len(mapping)} tokens kept")

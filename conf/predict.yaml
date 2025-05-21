@@ -1,5 +1,5 @@
 predict:
-  checkpoint_path: ${artifacts_dir}/train-baseline-qwen4b-r8/checkpoints/checkpoint-7500
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen0.6b-r128/checkpoints/checkpoint-final
   enable_ttt: true
   use_data_augmentation_for_eval: false
-  num_augmentations: 5
+  num_augmentations: 10
