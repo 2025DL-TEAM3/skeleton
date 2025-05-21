@@ -44,7 +44,6 @@ class ARCSolver:
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
         cache_dir = cfg.get("cache_dir", None)
-        sep_str = cfg.get("sep_str", "\n")
         model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B")
         use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
@@ -126,13 +125,6 @@ class ARCSolver:
             bias="none",
         )
         self.peft_model = None
-
-        self.pixel_ids = [
-            self.tokenizer.encode(str(i), add_special_tokens=False)[0] for i in range(10)
-        ]
-        
-        self.sep_str = sep_str
-        self.sep_token_id = self.tokenizer.encode(self.sep_str, add_special_tokens=False)[0]
         
         self.enable_ttt = False
         
@@ -210,6 +202,8 @@ class ARCSolver:
             callbacks=callbacks if callbacks else None,
         )
         
+        # preemptively save the model before training, to check error
+        trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
         trainer.train()
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
         end_time = time.time()

@@ -64,10 +64,12 @@ base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
 print("Old Base model vocab size:", base_model.config.vocab_size)
 apply_custom_head(base_model, tokenizer)
 
-
-# check base model vocab size
-print("Base model vocab size:", base_model.config.vocab_size)
-# check base model 
+sep_str = "\n"
+tokenized = tokenizer.tokenize(sep_str)
+token_id = tokenizer.convert_tokens_to_ids(tokenized)
+print("sep_str", sep_str)
+print("tokenized", tokenized)
+print("token_id", token_id)
 
 # def tok_to_ids_1(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
 #     """

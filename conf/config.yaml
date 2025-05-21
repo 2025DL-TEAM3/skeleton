@@ -7,7 +7,6 @@ defaults:
   - _self_
 
 token: null
-sep_str: '\n'
 
 # Define the root workspace directory
 # can be used for kubernetes
