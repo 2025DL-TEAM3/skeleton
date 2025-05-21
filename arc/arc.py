@@ -6,6 +6,7 @@ import numpy as np
 from trl import SFTTrainer, SFTConfig
 from transformers import GenerationConfig, TrainingArguments, EarlyStoppingCallback
 import torch
+import torch.nn.functional as F
 from typing import List, Union, Literal, Any, TypedDict, Callable, Optional
 from datasets import load_dataset, Dataset as HFDataset
 from pprint import pprint
@@ -213,30 +214,6 @@ class ARCSolver:
     def test_time_training(self, examples: List[ExampleDict]):
         pass
 
-    def _select_best_grid(self, datapoint_candidates: List[DataPointDict]) -> Grid:
-        # for now, just vote for the most common grid
-        inferred_grids = [
-            datapoint["test"][0]["output"]
-            for datapoint in datapoint_candidates
-        ]
-
-        grid_counts = {}
-        for grid in inferred_grids:
-            grid_tuple = tuple(map(tuple, grid))
-            if grid_tuple in grid_counts:
-                grid_counts[grid_tuple] += 1
-            else:
-                grid_counts[grid_tuple] = 1
-        
-        # if all grides are distinct, return a random one
-        if len(grid_counts) == len(inferred_grids):
-            print("All grids are distinct, returning a random one.")
-            return random.choice(inferred_grids)
-    
-        # find the grid with the highest count
-        best_grid = max(grid_counts, key=grid_counts.get)
-        return best_grid
-
     def predict(
         self, 
         examples: List[ExampleDict], 
@@ -245,7 +222,7 @@ class ARCSolver:
         if self.enable_ttt:
             self.test_time_training(examples)
         
-        datapoint = {
+        base_datapoint = {
             "train": examples,
             "test": [
                 {
@@ -256,32 +233,27 @@ class ARCSolver:
         }
         
         if not self.use_data_augmentation_for_eval or self.num_augmentations < 1:
-            inferred_grid = self._predict_grid_batch([datapoint])[0]
-            return inferred_grid
+            (output_ids, logits) = self._predict_logits_batch([base_datapoint])[0]
+            return self._select_best_grid_from_logits(
+                [(base_datapoint, None, output_ids, logits)]
+            )
         
         augmented_datapoints_and_params_map = [
-            data_augmentation.random_datapoint_augmentation(datapoint, swap_train_and_test=False)
+            data_augmentation.random_datapoint_augmentation(base_datapoint, swap_train_and_test=False)
             for _ in range(self.num_augmentations)
         ]
         
-        inferred_grids = []
+        all_candidates = []
         batch_size = self.batch_size_generation or 1
         for batch in arc_utils.chunked(augmented_datapoints_and_params_map, batch_size):
+            # TODO how can i reverse the augmentation?
             datapoints, params_maps = zip(*batch) # list[tuple[DataPointDict, dict]]
-            inferred = self._predict_grid_batch(datapoints)
-            inferred_grids.extend(
-                zip(datapoints, params_maps, inferred)
-            )
-        
-        for dp, _, grid in inferred_grids:
-            dp["test"][0]["output"] = grid
-        
-        reversed_datapoints = [
-            data_augmentation.revesre_datapoint_augmentation(dp, params_map)
-            for dp, params_map, _ in inferred_grids
-        ]
-        
-        final_grid = self._select_best_grid(reversed_datapoints)
+            out_batch = self._predict_logits_batch(list(datapoints))
+            # out_batch: list[(ids, logits)]
+            for (output_ids, logits), datapoint, params_map in zip(out_batch, datapoints, params_maps):
+                all_candidates.append((datapoint, params_map, output_ids, logits))
+
+        final_grid = self._select_best_grid_from_logits(all_candidates)
         return final_grid
     
     def _infer_test_shape(self, datapoint: DataPointDict) -> tuple[int, int]:
@@ -296,6 +268,90 @@ class ARCSolver:
             y = (train_output.shape[1] * test_input.shape[1] // train_input.shape[1])
         
         return x, y
+    
+    def _predict_logits_batch(
+        self, 
+        datapoints: List[DataPointDict]
+    ) -> List[tuple[List[int], torch.FloatTensor]]:
+        prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in datapoints]
+        prompt_strs = [
+            self.tokenizer.apply_chat_template(
+                prompt_msg,
+                tokenize=False,
+                add_generation_prompt=True,
+                continue_final_message=False,
+                enable_thinking=False,
+            )
+            for prompt_msg in prompt_messages
+        ]
+        
+        model_inputs = self.tokenizer(
+            text=prompt_strs,
+            add_special_tokens=False,
+            return_tensors="pt",
+            padding=True,
+            truncation=True, 
+        ).to(self.device)
+        
+        prompt_lens = model_inputs["input_ids"].ne(self.tokenizer.pad_token_id).long().sum(dim=1) # (batch_size,)
+        
+        with torch.no_grad():
+            output = self.base_model.generate(
+                **model_inputs,
+                generation_config=self.generation_config,
+                return_dict_in_generate=True,
+                output_scores=True,
+            )
+        
+        # output.sequences: (batch_size, total_seq_len)
+        # output.scores: Tuples of (batch_size, vocab_size), one per generation step
+        # scores: (batch_size, gen_len, vocab_size)
+        scores = torch.stack(output.scores, dim=1)
+        
+        results = []
+        for i, seq in enumerate(output.sequences):
+            prompt_len = prompt_lens[i]
+            output_ids = seq[prompt_len:].cpu().tolist()
+            logits = scores[i].cpu() # (gen_len, vocab_size)
+            results.append((output_ids, logits))
+        return results
+    
+    def _select_best_grid_from_logits(
+        self, 
+        candidates: List[tuple[DataPointDict, dict, List[int], torch.FloatTensor]]
+    ) -> Grid:
+        best_score = float("-inf")
+        best_grid  = None
+
+        for dp, params, ids, logits in candidates:
+            # compute per‐token log‐probs
+            log_probs = F.log_softmax(logits, dim=-1) # (gen_len, vocab_size)
+            token_ids = torch.tensor(ids).unsqueeze(-1) # (gen_len, 1), sampled token ids
+            
+            # gather log‐probs of the actually generated tokens
+            # Note: score computes a confidence [log p(augmented testgrid | augmented train grid)]
+            token_log_probs = log_probs.gather(1, token_ids).squeeze(-1)  # (gen_len,)
+            score = token_log_probs.sum().item()
+
+            # parse and reverse‐augment
+            try:
+                grid_aug = self.parse_grid(ids)
+                grid_np = np.array(grid_aug)
+            except Exception as e:
+                print("Grid parding failed. Excluding this candidate.")
+                continue
+        
+            dp["test"][0]["output"] = grid_np
+            grid = data_augmentation.revesre_datapoint_augmentation(
+                dp, params
+            )["test"][0]["output"]
+
+            if score > best_score:
+                best_score = score
+                best_grid  = grid
+
+        return best_grid
+
     
     def _predict_grid_batch(self, datapoints: List[DataPointDict]) -> List[Grid]:
         prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in datapoints]
@@ -340,6 +396,30 @@ class ARCSolver:
                 x, y = self._infer_test_shape(datapoint)
                 grids.append(np.random.randint(0, 10, (x, y)))
         return grids
+    
+    def _select_best_grid(self, datapoint_candidates: List[DataPointDict]) -> Grid:
+        # for now, just vote for the most common grid
+        inferred_grids = [
+            datapoint["test"][0]["output"]
+            for datapoint in datapoint_candidates
+        ]
+
+        grid_counts = {}
+        for grid in inferred_grids:
+            grid_tuple = tuple(map(tuple, grid))
+            if grid_tuple in grid_counts:
+                grid_counts[grid_tuple] += 1
+            else:
+                grid_counts[grid_tuple] = 1
+        
+        # if all grides are distinct, return a random one
+        if len(grid_counts) == len(inferred_grids):
+            print("All grids are distinct, returning a random one.")
+            return random.choice(inferred_grids)
+    
+        # find the grid with the highest count
+        best_grid = max(grid_counts, key=grid_counts.get)
+        return best_grid
 
     def prepare_evaluation(
         self,
