@@ -49,8 +49,6 @@ class ARCSolver:
         use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
         lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
-        target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
-        
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -114,11 +112,10 @@ class ARCSolver:
             print("Model vocabulary optimization skipped.")
 
         
-        # Use default target modules if none provided
-        if target_modules is None:
-            # Include lm_head and embeddings for training with LoRA
+        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+        if use_custom_head:
             target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head", "embed_tokens"]
-            
+
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
             inference_mode=False,
@@ -332,8 +329,6 @@ class ARCSolver:
                 print(f"Error parsing grid, using random grid")
                 print("Parsed grid:")
                 arc_utils.print_grid(parsed_grid)
-                print("Output ids:")
-                print(output_ids)
                 traceback.print_exc()
                 grid = np.random.randint(0, 10, (x, y))
 
