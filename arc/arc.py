@@ -232,22 +232,19 @@ class ARCSolver:
                 }
             ],
         }
-        
-        if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
-            return inference_helpers.predict_single(
-                self.peft_model if self.peft_model else self.base_model,
-                self.tokenizer,
-                self.generation_config,
-                parse_grid_fn=self.parse_grid,
-                base_datapoint=base_datapoint,
-            )
-        
-        return inference_helpers.route_predict(
+
+        inferencer = inference_helpers.ARCInferencer(
             self.peft_model if self.peft_model else self.base_model,
             self.tokenizer,
             self.generation_config,
             parse_grid_fn=self.parse_grid,
-            base_datapoint=base_datapoint,
+        )
+        
+        if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
+            return inferencer.predict_single(base_datapoint)
+        
+        return inferencer.predict(
+            base_datapoint,
             num_augmentations=self.num_augmentations,
             batch_size_generation=self.batch_size_generation,
             grid_select_policy=self.grid_select_policy,

@@ -115,7 +115,7 @@ def main(cfg: DictConfig):
 
     sys.stdout = sys.stderr = Tee(sys.stdout, open(log_file_path, "a"))
     
-    print("--- Hydra Config ---")
+    print("--- Hydra Config (See generate/evaluate) ---")
     print(OmegaConf.to_yaml(cfg))
     
     if hasattr(cfg.evaluate, "seed") and cfg.evaluate.seed is not None:
@@ -130,6 +130,9 @@ def main(cfg: DictConfig):
     pparent_dir = os.path.dirname(os.path.dirname(checkpoint_path)) # train_artifacts_dir
     config_path = os.path.join(pparent_dir, "config.yaml")
     print(f"Config path: {config_path}")
+    cfg_from_checkpoint = OmegaConf.load(config_path)
+    print("--- Hydra Config from checkpoint (See model) ---")
+    print(OmegaConf.to_yaml(cfg_from_checkpoint))
     solver = ARCSolver( # TODO : should support init without arguments
         config_path=config_path,
     )
