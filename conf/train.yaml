@@ -22,6 +22,7 @@ train:
   eval_strategy: "steps"
   eval_steps: 1000
   save_strategy: "epoch"
+  save_steps: 1000
   logging_strategy: "steps"
   logging_steps: 10
 

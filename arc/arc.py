@@ -72,7 +72,7 @@ class ARCSolver:
             "torch_dtype": torch.float16,  # Set the data type for the model
             "use_cache": False,  # Disable caching to save memory
             "token": token,
-            "tie_word_embeddings": not use_custom_head,
+            # "tie_word_embeddings": not use_custom_head,
             # "device_map": "auto",  # Automatically map the model to available devices
         }
         if cache_dir is not None:
@@ -163,7 +163,6 @@ class ARCSolver:
         #     grid.append(row)
         # return grid
         decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
-        print(f"Decoded: {decoded}")
         grid = arc_utils.gridify_grid(decoded)
         return grid
 
@@ -188,6 +187,7 @@ class ARCSolver:
         eval_strategy: str = "steps",
         eval_steps: int = 1000,
         save_strategy: str = "epoch",
+        save_steps: int = 1000,
         logging_strategy: str = "steps",
         logging_steps: int = 100,
         use_data_augmentation: bool = True,
@@ -235,6 +235,7 @@ class ARCSolver:
             logging_steps=logging_steps,
             log_level="debug",
             save_strategy=save_strategy,
+            save_steps=save_steps,
             
             learning_rate=learning_rate,
             optim=optimizer,
@@ -359,7 +360,7 @@ class ARCSolver:
             do_sample=True,   
         )
         
-        output_ids = self.base_model.generate(
+        output_ids = self.peft_model.generate(
             **model_inputs,
             generation_config=config,
         ).squeeze(0).cpu()
@@ -431,7 +432,3 @@ class ARCSolver:
 
 if __name__ == "__main__":
     solver = ARCSolver()
-
-
-
-

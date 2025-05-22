@@ -306,7 +306,8 @@ class ARCSFTTrainer:
                     self.model.train()
                 
                 del batch_device, loss
-                if global_step % 1000 == 0:
+                # Save checkpoint based on save_steps from train.yaml configuration
+                if global_step % self.args.save_steps == 0:
                     self.save_model(
                         os.path.join(self.args.output_dir, f"checkpoint-{epoch + 1}-{global_step}"),
                         optimizer,
