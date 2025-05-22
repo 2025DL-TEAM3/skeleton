@@ -3,7 +3,7 @@ from pprint import pprint
 from copy import deepcopy
 import random
 import numpy as np
-from typing import Literal, Callable
+from typing import Literal, Callable, Optional, List
 from functools import partial
 
 from .datatypes import *
@@ -29,6 +29,12 @@ def _get_grid_augmentation_map() -> dict[str,tuple[Callable[[Grid], Grid], Calla
         "mirror": (mirror, get_random_mirror_params),
     }
 
+def grid_augmentation(grid: Grid, params_map: dict, augmentations_names: list[str]) -> Grid:
+    for aug_name in augmentations_names:
+        func, kwargs = params_map[aug_name]
+        grid = func(grid, **kwargs)
+    return grid
+
 def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test: bool = True) -> tuple[DataPointDict, dict]:
     """Same augmentation for every grid"""
     augmentations_names = ["geometric", "color"]
@@ -38,40 +44,44 @@ def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test:
         kwargs = kwarg_generator()
         params_map[key] = (func, kwargs)
     
-    def augment(grid: Grid) -> Grid:
-        for aug_name in augmentations_names:
-            func, kwargs = params_map[aug_name]
-            grid = func(grid, **kwargs)
-        return grid
+    _augment_fn = partial(grid_augmentation, params_map=params_map, augmentations_names=augmentations_names)
     
     augmented_datapoint = deepcopy(datapoint)
-    augmented_datapoint['train'] = [_augment_example_dict(example, augment) for example in datapoint['train']]
-    augmented_datapoint['test'] = [_augment_example_dict(example, augment) for example in datapoint['test']]
+    augmented_datapoint['train'] = [_augment_example_dict(example, _augment_fn) for example in datapoint['train']]
+    augmented_datapoint['test'] = [_augment_example_dict(example, _augment_fn) for example in datapoint['test']]
 
     if swap_train_and_test:
         augmented_datapoint = random_swap_train_and_test(augmented_datapoint)
     return augmented_datapoint, params_map
 
-def revesre_datapoint_augmentation(datapoint: DataPointDict, params_map: dict) -> DataPointDict:
-    augmentation_names = list(params_map.keys())
+def reverse_grid_augmentation(grid: Grid, params_map: dict, augmentations_names: Optional[list[str]] = None, skip_names: Optional[list[str]] = None) -> Grid:
+    if augmentations_names is None:
+        augmentations_names = list(params_map.keys())
     
-    def reverse_augment(grid: Grid) -> Grid:
-        for aug_name in augmentation_names:
-            _, kwargs = params_map[aug_name]
-            
-            reverse_func = None
-            if aug_name == "geometric":
-                reverse_func = reverse_geometric_augmentation
-            elif aug_name == "color":
-                reverse_func = reverse_color_permutation
-            else:
-                raise ValueError(f"Unknown augmentation: {aug_name}")
-            grid = reverse_func(grid, **kwargs)
-        return grid
+    for aug_name in augmentations_names:
+        if skip_names is not None and aug_name in skip_names:
+            continue
+        
+        _, kwargs = params_map[aug_name]
+        
+        reverse_func = None
+        if aug_name == "geometric":
+            reverse_func = reverse_geometric_augmentation
+        elif aug_name == "color":
+            reverse_func = reverse_color_permutation
+        else:
+            raise ValueError(f"Unknown augmentation: {aug_name}")
+        grid = reverse_func(grid, **kwargs)
+    return grid
+
+def revesre_datapoint_augmentation(datapoint: DataPointDict, params_map: dict) -> DataPointDict:
+    augmentations_names = list(params_map.keys())
+    
+    _reverse_augment_fn = partial(reverse_grid_augmentation, params_map=params_map, augmentations_names=augmentations_names)
 
     reversed_datapoint = deepcopy(datapoint)
-    reversed_datapoint['train'] = [_augment_example_dict(example, reverse_augment) for example in datapoint['train']]
-    reversed_datapoint['test'] = [_augment_example_dict(example, reverse_augment) for example in datapoint['test']]
+    reversed_datapoint['train'] = [_augment_example_dict(example, _reverse_augment_fn) for example in datapoint['train']]
+    reversed_datapoint['test'] = [_augment_example_dict(example, _reverse_augment_fn) for example in datapoint['test']]
     return reversed_datapoint
 
 def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:

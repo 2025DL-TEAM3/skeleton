@@ -20,7 +20,7 @@ from transformers import (
 )
 from peft import LoraConfig, PeftModel
 
-from . import arc_utils, data_transform, data_augmentation
+from . import arc_utils, data_transform, data_augmentation, inference_helpers
 from .datatypes import *
 
 def load_config(config_path: str) -> DictConfig:
@@ -320,36 +320,16 @@ class ARCSolver:
         self, 
         candidates: List[tuple[DataPointDict, dict, List[int], torch.FloatTensor]]
     ) -> Grid:
-        best_score = float("-inf")
-        best_grid  = None
-
-        for dp, params, ids, logits in candidates:
-            # compute per‐token log‐probs
-            log_probs = F.log_softmax(logits, dim=-1) # (gen_len, vocab_size)
-            token_ids = torch.tensor(ids).unsqueeze(-1) # (gen_len, 1), sampled token ids
-            
-            # gather log‐probs of the actually generated tokens
-            # Note: score computes a confidence [log p(augmented testgrid | augmented train grid)]
-            token_log_probs = log_probs.gather(1, token_ids).squeeze(-1)  # (gen_len,)
-            score = token_log_probs.sum().item()
-
-            # parse and reverse‐augment
-            try:
-                grid_aug = self.parse_grid(ids)
-                grid_np = np.array(grid_aug)
-            except Exception as e:
-                print("Grid parding failed. Excluding this candidate.")
-                continue
+        # best_grid = inference_helpers.select_best_grid_from_logits_grid_wise_selection(
+        #     candidates,
+        #     parse_grid_fn=self.parse_grid,
+        # )
         
-            dp["test"][0]["output"] = grid_np
-            grid = data_augmentation.revesre_datapoint_augmentation(
-                dp, params
-            )["test"][0]["output"]
-
-            if score > best_score:
-                best_score = score
-                best_grid  = grid
-
+        best_grid = inference_helpers.select_best_grid_from_logits_cell_wise_argmax(
+            candidates,
+            parse_grid_fn=self.parse_grid,
+            tokenizer=self.tokenizer,
+        )
         return best_grid
 
     
