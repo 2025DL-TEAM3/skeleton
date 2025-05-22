@@ -79,6 +79,10 @@ def shrink_model_embeddings(
     mapping: Dict[int, int] # key: old token id, value: new token id
 ):
     with torch.no_grad():
+        # copy input embeddings to lm head
+        model.lm_head.weight = nn.Parameter(model.get_input_embeddings().weight.clone())
+        print(f"✓ Model output embeddings weight copied from input embeddings")
+        
         # copy embeddings to keep
         old_token_row_indices = torch.tensor([x[0] for x in sorted(mapping.items(), key=lambda x: x[1])])
         old_token_row_indices = old_token_row_indices.to(model.get_input_embeddings().weight.data.device)

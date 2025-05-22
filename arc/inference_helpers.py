@@ -234,12 +234,11 @@ class ARCInferencer:
                     grid_aug = np.array(parsed_grid)
                     grids.append(grid_aug)
                 except Exception as e:
-                    print(f"Error parsing grid, using random grid")
-                    print("Parsed grid:")
-                    arc_utils.print_grid(parsed_grid)
-                    traceback.print_exc()
-                    x, y = self._infer_test_shape(base_datapoint)
-                    grids.append(np.random.randint(0, 10, (x, y)))
+                    continue
+            if not grids:
+                print("No valid grids found. Returning random grid.")
+                x, y = self._infer_test_shape(base_datapoint)
+                return np.random.randint(0, 10, (x, y))
             return self._vote_select(self._reverse_grids(grids, params_maps))
         else:
             candidate_ids_logits = []

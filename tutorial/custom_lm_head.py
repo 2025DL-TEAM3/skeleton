@@ -26,7 +26,7 @@ from arc import arc_utils, data_transform, data_augmentation
 from arc.datatypes import *
 from arc.custom_head import *
 
-model_id = "Qwen/Qwen3-0.6B"
+model_id = "Qwen/Qwen3-4B"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Configure the BitsAndBytes settings for 4-bit quantization to reduce memory usage
@@ -61,61 +61,29 @@ base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
     **model_args,
 ).to(device)
 
-print("Old Base model vocab size:", base_model.config.vocab_size)
+input_emb = base_model.get_input_embeddings().weight
+lm_head = base_model.lm_head.weight
+output_emb = base_model.get_output_embeddings().weight
+
+print(input_emb.data_ptr() == lm_head.data_ptr())
+print(input_emb.data_ptr() == output_emb.data_ptr())
+print(lm_head.data_ptr() == output_emb.data_ptr())
+
+print(torch.allclose(input_emb, lm_head))
+print(torch.allclose(input_emb, output_emb))
+print(torch.allclose(lm_head, output_emb))
+
 apply_custom_head(base_model, tokenizer)
 
-sep_str = "\n"
-tokenized = tokenizer.tokenize(sep_str)
-token_id = tokenizer.convert_tokens_to_ids(tokenized)
-print("sep_str", sep_str)
-print("tokenized", tokenized)
-print("token_id", token_id)
 
-# def tok_to_ids_1(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-#     """
-#     Convert a list of tokens to their corresponding IDs using the tokenizer.
-#     """
-#     ids = []
-#     for tok in keep_tok:
-#         tok_tokenized = tokenizer.tokenize(tok)[0]
-#         if tok != tok_tokenized:
-#             print(f"Warning: {tok} is not the same as {tok_tokenized}")
-#         tok_id = tokenizer.convert_tokens_to_ids(tok_tokenized)
-#         if tok_id != tokenizer.unk_token_id:
-#             ids.append(tok_id)
-#     return ids
+input_emb = base_model.get_input_embeddings().weight
+lm_head = base_model.lm_head.weight
+output_emb = base_model.get_output_embeddings().weight
 
-# def tok_to_ids_2(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-#     ids = []
-#     for tok in keep_tok:
-#         tok_id = tokenizer.encode(tok, add_special_tokens=False)[0]
-#         if tok_id != tokenizer.unk_token_id:
-#             ids.append(tok_id)
-#     return ids
+print(input_emb.data_ptr() == lm_head.data_ptr())
+print(input_emb.data_ptr() == output_emb.data_ptr())
+print(lm_head.data_ptr() == output_emb.data_ptr())
 
-# def tok_to_ids_3(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-#     ids = []
-#     for tok in keep_tok:
-#         tok_id = tokenizer(tok, add_special_tokens=False).input_ids[0]
-#         if tok_id != tokenizer.unk_token_id:
-#             ids.append(tok_id)
-#     return ids
-
-# def tok_to_ids_4(keep_tok: list[str], tokenizer: PreTrainedTokenizer) -> list[int]:
-#     ids = []
-#     for tok in keep_tok:
-#         tokenized = tokenizer.tokenize(tok)[0]
-#         tok_id = tokenizer.get_vocab()[tokenized]
-#         if tok_id != tokenizer.unk_token_id:
-#             ids.append(tok_id)
-#     return ids
-
-# print("keep_tok", keep_tok)
-# ids1 = sorted(tok_to_ids_1(keep_tok, tokenizer))
-# print("ids1", ids1)
-# ids2 = sorted(tok_to_ids_2(keep_tok, tokenizer))
-# print("ids2", ids2)
-# ids3 = sorted(tok_to_ids_3(keep_tok, tokenizer))
-# print("ids3", ids3)
-# ids4 = sorted(tok_to_ids_4(keep_tok, tokenizer))
-# print("ids4", ids4)
+print(torch.allclose(input_emb, lm_head))
+print(torch.allclose(input_emb, output_emb))
+print(torch.allclose(lm_head, output_emb))

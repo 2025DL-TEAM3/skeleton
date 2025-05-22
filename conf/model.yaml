@@ -2,4 +2,4 @@ model:
   model_id: Qwen/Qwen3-0.6B
   lora_rank: 128
   lora_alpha: 64
-  use_custom_head: false
+  use_custom_head: true
