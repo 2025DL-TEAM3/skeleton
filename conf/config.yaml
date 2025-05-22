@@ -3,7 +3,7 @@ defaults:
   - dataset
   - train
   - evaluate
-  - predict
+  - generate
   - _self_
 
 token: null

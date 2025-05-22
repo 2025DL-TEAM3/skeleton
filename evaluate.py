@@ -104,7 +104,7 @@ def main(cfg: DictConfig):
     from datasets import Dataset
 
     artifacts_dir = cfg.artifacts_dir
-    checkpoint_path = cfg.predict.checkpoint_path
+    checkpoint_path = cfg.generate.checkpoint_path
     # rel_path = os.path.relpath(checkpoint_path, artifacts_dir)
     # artifact_name = rel_path.split(os.sep)[0]
     # checkpoint_name = rel_path.split(os.sep)[-1]
@@ -133,9 +133,9 @@ def main(cfg: DictConfig):
     solver = ARCSolver( # TODO : should support init without arguments
         config_path=config_path,
     )
-    predict_config = OmegaConf.to_container(cfg.predict, resolve=True)
+    generate_config = OmegaConf.to_container(cfg.generate, resolve=True)
     solver.prepare_evaluation(
-        **predict_config
+        **generate_config
     )
     
     eval_dataset = Dataset.from_pandas(df).shuffle(seed=42).select(range(min(cfg.evaluate.num_samples, len(df))))

@@ -134,6 +134,7 @@ class ARCSolver:
             do_sample=True,   
         )
         self.batch_size_generation = 1
+        self.grid_select_policy = "naive"
         
         
     def parse_grid(self, ids: List[int]) -> Grid:
@@ -232,190 +233,43 @@ class ARCSolver:
             ],
         }
         
-        if not self.use_data_augmentation_for_eval or self.num_augmentations < 1:
-            (output_ids, logits) = self._predict_logits_batch([base_datapoint])[0]
-            return self._select_best_grid_from_logits(
-                [(base_datapoint, None, output_ids, logits)]
+        if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
+            return inference_helpers.predict_single(
+                self.peft_model if self.peft_model else self.base_model,
+                self.tokenizer,
+                self.generation_config,
+                parse_grid_fn=self.parse_grid,
+                base_datapoint=base_datapoint,
             )
         
-        augmented_datapoints_and_params_map = [
-            data_augmentation.random_datapoint_augmentation(base_datapoint, swap_train_and_test=False)
-            for _ in range(self.num_augmentations)
-        ]
-        
-        all_candidates = []
-        batch_size = self.batch_size_generation or 1
-        for batch in arc_utils.chunked(augmented_datapoints_and_params_map, batch_size):
-            # TODO how can i reverse the augmentation?
-            datapoints, params_maps = zip(*batch) # list[tuple[DataPointDict, dict]]
-            out_batch = self._predict_logits_batch(list(datapoints))
-            # out_batch: list[(ids, logits)]
-            for (output_ids, logits), datapoint, params_map in zip(out_batch, datapoints, params_maps):
-                all_candidates.append((datapoint, params_map, output_ids, logits))
-
-        final_grid = self._select_best_grid_from_logits(all_candidates)
-        return final_grid
-    
-    def _infer_test_shape(self, datapoint: DataPointDict) -> tuple[int, int]:
-        train_input = np.array(datapoint['train'][0]['input'])
-        train_output = np.array(datapoint['train'][0]['output'])
-        test_input = np.array(datapoint['test'][0]['input'])
-        
-        if train_input.shape == train_output.shape:
-            x, y = test_input.shape
-        else:
-            x = (train_output.shape[0] * test_input.shape[0] // train_input.shape[0])
-            y = (train_output.shape[1] * test_input.shape[1] // train_input.shape[1])
-        
-        return x, y
-    
-    def _predict_logits_batch(
-        self, 
-        datapoints: List[DataPointDict]
-    ) -> List[tuple[List[int], torch.FloatTensor]]:
-        prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in datapoints]
-        prompt_strs = [
-            self.tokenizer.apply_chat_template(
-                prompt_msg,
-                tokenize=False,
-                add_generation_prompt=True,
-                continue_final_message=False,
-                enable_thinking=False,
-            )
-            for prompt_msg in prompt_messages
-        ]
-        
-        model_inputs = self.tokenizer(
-            text=prompt_strs,
-            add_special_tokens=False,
-            return_tensors="pt",
-            padding=True,
-            truncation=True, 
-        ).to(self.device)
-        
-        prompt_lens = model_inputs["input_ids"].ne(self.tokenizer.pad_token_id).long().sum(dim=1) # (batch_size,)
-        
-        with torch.no_grad():
-            output = self.base_model.generate(
-                **model_inputs,
-                generation_config=self.generation_config,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-        
-        # output.sequences: (batch_size, total_seq_len)
-        # output.scores: Tuples of (batch_size, vocab_size), one per generation step
-        # scores: (batch_size, gen_len, vocab_size)
-        scores = torch.stack(output.scores, dim=1)
-        
-        results = []
-        for i, seq in enumerate(output.sequences):
-            prompt_len = prompt_lens[i]
-            output_ids = seq[prompt_len:].cpu().tolist()
-            logits = scores[i].cpu() # (gen_len, vocab_size)
-            results.append((output_ids, logits))
-        return results
-    
-    def _select_best_grid_from_logits(
-        self, 
-        candidates: List[tuple[DataPointDict, dict, List[int], torch.FloatTensor]]
-    ) -> Grid:
-        # best_grid = inference_helpers.select_best_grid_from_logits_grid_wise_selection(
-        #     candidates,
-        #     parse_grid_fn=self.parse_grid,
-        # )
-        
-        best_grid = inference_helpers.select_best_grid_from_logits_cell_wise_argmax(
-            candidates,
+        return inference_helpers.route_predict(
+            self.peft_model if self.peft_model else self.base_model,
+            self.tokenizer,
+            self.generation_config,
             parse_grid_fn=self.parse_grid,
-            tokenizer=self.tokenizer,
+            base_datapoint=base_datapoint,
+            num_augmentations=self.num_augmentations,
+            batch_size_generation=self.batch_size_generation,
+            grid_select_policy=self.grid_select_policy,
         )
-        return best_grid
-
-    
-    def _predict_grid_batch(self, datapoints: List[DataPointDict]) -> List[Grid]:
-        prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in datapoints]
-        prompt_strs = [
-            self.tokenizer.apply_chat_template(
-                prompt_msg,
-                tokenize=False,
-                add_generation_prompt=True,
-                continue_final_message=False,
-                enable_thinking=False,
-            )
-            for prompt_msg in prompt_messages
-        ]
-        
-        model_inputs = self.tokenizer(
-            text=prompt_strs,
-            add_special_tokens=False,
-            return_tensors="pt",
-            padding=True,
-            truncation=True, 
-        ).to(self.device)
-        
-        prompt_lens = model_inputs["input_ids"].ne(self.tokenizer.pad_token_id).long().sum(dim=1)
-        
-        with torch.no_grad():
-            output = self.base_model.generate(
-                **model_inputs,
-                generation_config=self.generation_config,
-            ) # (batch_size, total_seq_len)
-        
-        grids = []
-        for seq, prompt_len, datapoint in zip(output, prompt_lens, datapoints):
-            new_ids = seq[prompt_len:].cpu().tolist()
-            try:
-                parsed_grid = self.parse_grid(new_ids)
-                grids.append(np.array(parsed_grid))
-            except Exception as e:
-                print(f"Error parsing grid, using random grid")
-                print("Parsed grid:")
-                arc_utils.print_grid(parsed_grid)
-                traceback.print_exc()
-                x, y = self._infer_test_shape(datapoint)
-                grids.append(np.random.randint(0, 10, (x, y)))
-        return grids
-    
-    def _select_best_grid(self, datapoint_candidates: List[DataPointDict]) -> Grid:
-        # for now, just vote for the most common grid
-        inferred_grids = [
-            datapoint["test"][0]["output"]
-            for datapoint in datapoint_candidates
-        ]
-
-        grid_counts = {}
-        for grid in inferred_grids:
-            grid_tuple = tuple(map(tuple, grid))
-            if grid_tuple in grid_counts:
-                grid_counts[grid_tuple] += 1
-            else:
-                grid_counts[grid_tuple] = 1
-        
-        # if all grides are distinct, return a random one
-        if len(grid_counts) == len(inferred_grids):
-            print("All grids are distinct, returning a random one.")
-            return random.choice(inferred_grids)
-    
-        # find the grid with the highest count
-        best_grid = max(grid_counts, key=grid_counts.get)
-        return best_grid
 
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
         enable_ttt: bool = True,
-        use_data_augmentation_for_eval: bool = True,
+        use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 5,
         batch_size_generation: int = 1,
+        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
     ):
         """
         Load pretrained weight, make model eval mode, etc.
         """
         self.enable_ttt = enable_ttt
-        self.use_data_augmentation_for_eval = use_data_augmentation_for_eval
+        self.use_data_augmentation_for_generation = use_data_augmentation_for_generation
         self.num_augmentations = num_augmentations
         self.batch_size_generation = batch_size_generation
+        self.grid_select_policy = grid_select_policy
         
         try:
             # Note: checkpoint config should be match with the model config used in intialization

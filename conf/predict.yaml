@@ -1,6 +1,0 @@
-predict:
-  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16/checkpoints/checkpoint-final
-  enable_ttt: true
-  use_data_augmentation_for_eval: true
-  num_augmentations: 10
-  batch_size_generation: 2
