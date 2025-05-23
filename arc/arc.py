@@ -253,11 +253,10 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
-        use_peft_model: bool = True,
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 14,
-        batch_size_generation: int = 14,
+        num_augmentations: int = 10,
+        batch_size_generation: int = 5,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
         **kwargs,
     ):
@@ -270,24 +269,20 @@ class ARCSolver:
         self.batch_size_generation = batch_size_generation
         self.grid_select_policy = grid_select_policy
         
-        if use_peft_model:
-            try:
-                # Note: checkpoint config should be match with the model config used in intialization
-                self.peft_model = PeftModel.from_pretrained(
-                    self.base_model,
-                    checkpoint_path, 
-                    is_trainable=enable_ttt,
-                )
-                print("Loaded LoRA adapter and tokenizer from checkpoint.")
-                self.peft_model.eval()
-            except Exception as e:
-                print(f"No LoRA adapter found or incompatible: {e}")
-                traceback.print_exc()
-                raise e
-        else:
-            print("Using base model without LoRA adapter.")
-            self.peft_model = None
-            self.base_model.eval()
+        try:
+            # Note: checkpoint config should be match with the model config used in intialization
+            self.peft_model = PeftModel.from_pretrained(
+                self.base_model,
+                checkpoint_path, 
+                is_trainable=enable_ttt,
+            )
+            print("Loaded LoRA adapter and tokenizer from checkpoint.")
+            self.peft_model.eval()
+        except Exception as e:
+            print(f"No LoRA adapter found or incompatible: {e}")
+            traceback.print_exc()
+            raise e
+
 
 if __name__ == "__main__":
     solver = ARCSolver()
