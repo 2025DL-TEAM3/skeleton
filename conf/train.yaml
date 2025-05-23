@@ -1,5 +1,5 @@
 train:
-  use_data_augmentation: false
+  use_data_augmentation: true
 
   num_train_epochs: 5
   per_device_train_batch_size: 1
@@ -8,7 +8,7 @@ train:
   gradient_checkpointing: false
 
   eval_strategy: "steps"
-  eval_steps: 10000
+  eval_steps: 500
   logging_strategy: "steps"
   logging_steps: 100
   report_to: "none"
@@ -29,6 +29,6 @@ train:
   patience: 5
   metric_for_best_model: "eval_loss"
   greater_is_better: false
-  # load_best_model_at_end: true
+  load_best_model_at_end: true
 
   dataset_num_proc: 4

@@ -208,9 +208,14 @@ class ARCSolver:
         # preemptively save the model before training, to check error
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
         trainer.train()
+        # save
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
+        trainer.state.save_to_json(os.path.join(self.logging_save_path, "trainer_state.json"))
+        with open(os.path.join(self.logging_save_path, "log_history.json"), "w") as f:
+            json.dump(trainer.state.log_history, f, indent=4)
         end_time = time.time()
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
+        msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
     def test_time_training(self, examples: List[ExampleDict]):
         pass

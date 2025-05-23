@@ -31,8 +31,11 @@ from arc.data_augmentation import (
 
     random_datapoint_augmentation,
     revesre_datapoint_augmentation,
+    reverse_grid_augmentation,
     random_task_augmentation
 )
+
+NUM_ITERATIONS = 10000
 
 # --- Unit tests for core augmentations ---
 
@@ -45,10 +48,11 @@ def test_geometric_and_reverse():
 
     # random params roundtrip
     random.seed(42)
-    params2 = get_random_geometric_augmentation_params()
-    aug2 = geometric_augmentation(grid, **params2)
-    rec2 = reverse_geometric_augmentation(aug2, **params2)
-    assert rec2 == grid
+    for _ in range(NUM_ITERATIONS):
+        params2 = get_random_geometric_augmentation_params()
+        aug2 = geometric_augmentation(grid, **params2)
+        rec2 = reverse_geometric_augmentation(aug2, **params2)
+        assert rec2 == grid
 
 @pytest.mark.parametrize("color_map", [
     {0: 5, 5: 0},
@@ -64,6 +68,17 @@ def test_color_and_reverse(color_map):
     cmap = params['color_map']
     assert isinstance(cmap, dict)
     assert set(cmap.keys()) == set(range(10)) and set(cmap.values()) <= set(range(10))
+
+    random.seed(42)
+    for _ in range(NUM_ITERATIONS):
+        params2 = get_random_color_permutation_params()
+        cmap2 = params2['color_map']
+        assert isinstance(cmap2, dict)
+        assert set(cmap2.keys()) == set(range(10)) and set(cmap2.values()) <= set(range(10))
+
+        perm2 = color_permutation(grid, cmap2)
+        rec2 = reverse_color_permutation(perm2, cmap2)
+        assert rec2 == grid
 
 @pytest.mark.parametrize("factor,expected", [
     ((2, 3), [[1,1,1,2,2,2], [1,1,1,2,2,2], [3,3,3,4,4,4], [3,3,3,4,4,4]]),
@@ -113,12 +128,41 @@ def test_max_grid_shape():
 
 def test_random_datapoint_roundtrip_no_swap():
     dp = {
-        'train': [{'input': [[0]], 'output': [[1]]}],
-        'test':  [{'input': [[2]], 'output': [[3]]}]
+        'train': [{'input': [[0, 1], [2, 3]], 'output': [[1, 2], [3, 4]]}],
+        'test':  [{'input': [[2, 6], [7, 8]], 'output': [[3, 2], [8, 7]]}]
     }
-    aug, params = random_datapoint_augmentation(dp, swap_train_and_test=False)
-    rec = revesre_datapoint_augmentation(aug, params)
-    assert rec == dp
+
+    for _ in range(NUM_ITERATIONS):
+        aug, params = random_datapoint_augmentation(dp, swap_train_and_test=False)
+        rec = revesre_datapoint_augmentation(aug, params)
+        assert rec == dp
+
+def test_aug_with_datapoint_reverse_with_grid():
+    dp = {
+        'train': [{'input': [[0, 1], [2, 3]], 'output': [[1, 2], [3, 4]]}],
+        'test':  [{'input': [[2, 6], [7, 8]], 'output': [[3, 2], [8, 7]]}]
+    }
+
+    for _ in range(NUM_ITERATIONS):
+        aug, params = random_datapoint_augmentation(dp, swap_train_and_test=False)
+        for i, aug_train_exs in enumerate(aug['train']):
+            aug_input_grid = aug_train_exs['input']
+            r_input_grid = reverse_grid_augmentation(aug_input_grid, params)
+            assert dp['train'][i]['input'] == r_input_grid
+
+            aug_output_grid = aug_train_exs['output']
+            r_output_grid = reverse_grid_augmentation(aug_output_grid, params)
+            assert dp['train'][i]['output'] == r_output_grid
+        
+        for i, test_exs in enumerate(aug['test']):
+            aug_input_grid = test_exs['input']
+            aug_output_grid = test_exs['output']
+
+            r_input_grid = reverse_grid_augmentation(aug_input_grid, params)
+            r_output_grid = reverse_grid_augmentation(aug_output_grid, params)
+            assert dp['test'][i]['input'] == r_input_grid
+            assert dp['test'][i]['output'] == r_output_grid
+
 
 # --- reversed augmentation error on unknown key ---
 
