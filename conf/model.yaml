@@ -1,7 +1,7 @@
 model:
-  model_id: Qwen/Qwen3-0.6B
-  lora_rank: 128
-  lora_alpha: 64
+  model_id: Qwen/Qwen3-4B
+  lora_rank: 16
+  lora_alpha: 32
   use_custom_head: true
 
   target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
