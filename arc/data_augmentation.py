@@ -35,7 +35,7 @@ def grid_augmentation(grid: Grid, params_map: dict, augmentations_names: list[st
         grid = func(grid, **kwargs)
     return grid
 
-def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test: bool = True) -> tuple[DataPointDict, dict]:
+def random_datapoint_augmentation(datapoint: DataPointDict, swap_train_and_test: bool = False) -> tuple[DataPointDict, dict]:
     """Same augmentation for every grid"""
     augmentations_names = ["geometric", "color"]
     params_map = dict()
