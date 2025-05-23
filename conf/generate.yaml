@@ -3,7 +3,7 @@ generate:
   config_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
   use_peft_model: true
   
-  enable_ttt: true
+  enable_ttt: false
   use_data_augmentation_for_generation: true
   num_augmentations: 10
   batch_size_generation: 4

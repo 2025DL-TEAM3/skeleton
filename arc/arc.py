@@ -284,6 +284,9 @@ class ARCSolver:
                 print(f"No LoRA adapter found or incompatible: {e}")
                 traceback.print_exc()
                 raise e
+        else:
+            print("Using base model without LoRA adapter.")
+            self.peft_model = None
 
 if __name__ == "__main__":
     solver = ARCSolver()
