@@ -268,6 +268,17 @@ class ARCSolver:
         self.num_augmentations = num_augmentations
         self.batch_size_generation = batch_size_generation
         self.grid_select_policy = grid_select_policy
+
+        generation_config_msg = (
+            f"--------------- Generation Config ---------------\n"
+            f"Using generation config:\n"
+            f"- enable_ttt: {enable_ttt}\n"
+            f"- use_data_augmentation_for_generation: {use_data_augmentation_for_generation}\n"
+            f"- num_augmentations: {num_augmentations}\n"
+            f"- batch_size_generation: {batch_size_generation}\n"
+            f"- grid_select_policy: {grid_select_policy}\n"
+        )
+        print(generation_config_msg)
         
         try:
             # Note: checkpoint config should be match with the model config used in intialization
@@ -276,6 +287,14 @@ class ARCSolver:
                 checkpoint_path, 
                 is_trainable=enable_ttt,
             )
+            print("------------------ LoRA adapter loaded -----------------")
+            print(f"Model ID: {self.model_id}")
+            for adapter_name, config in self.peft_model.peft_config.items():
+                print(f"Adapter: {adapter_name}")
+                print(f"  Rank: {config.r}")
+                print(f"  Alpha: {config.lora_alpha}")
+                print(f"  Target Modules: {config.target_modules}")
+
             print("Loaded LoRA adapter and tokenizer from checkpoint.")
             self.peft_model.eval()
         except Exception as e:
