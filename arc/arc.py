@@ -49,6 +49,7 @@ class ARCSolver:
         use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
         lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
+        target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -110,11 +111,6 @@ class ARCSolver:
             print(f"✓ Model vocabulary optimization applied")
         else:
             print("Model vocabulary optimization skipped.")
-
-        
-        target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
-        if use_custom_head:
-            target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head", "embed_tokens"]
 
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
