@@ -287,6 +287,7 @@ class ARCSolver:
         else:
             print("Using base model without LoRA adapter.")
             self.peft_model = None
+            self.base_model.eval()
 
 if __name__ == "__main__":
     solver = ARCSolver()
