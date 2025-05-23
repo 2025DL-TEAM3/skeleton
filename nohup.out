@@ -1,0 +1,1603 @@
+--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 214.73it/s]파일 로딩:  16%|#5        | 47/300 [00:00<00:01, 233.59it/s]파일 로딩:  24%|##3       | 71/300 [00:00<00:02, 86.56it/s] 파일 로딩:  32%|###1      | 95/300 [00:00<00:01, 113.56it/s]파일 로딩:  40%|###9      | 119/300 [00:00<00:01, 135.32it/s]파일 로딩:  47%|####6     | 141/300 [00:01<00:01, 154.06it/s]파일 로딩:  54%|#####4    | 163/300 [00:01<00:00, 168.67it/s]파일 로딩:  61%|######1   | 184/300 [00:01<00:00, 176.36it/s]파일 로딩:  68%|######8   | 205/300 [00:02<00:01, 65.28it/s] 파일 로딩:  76%|#######6  | 228/300 [00:02<00:00, 84.19it/s]파일 로딩:  85%|########5 | 255/300 [00:02<00:00, 110.47it/s]파일 로딩:  92%|#########1| 275/300 [00:02<00:00, 97.92it/s] 파일 로딩: 100%|##########| 300/300 [00:02<00:00, 115.82it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/artifacts/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
+--- Hydra Config from checkpoint (See model) ---
+model:
+  model_id: Qwen/Qwen3-4B
+  lora_rank: 16
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: true
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: aug-qwen4b-r16-no-test-aug-no-ttt
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 2
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-aug-baseline-qwen4b-r16-custom-head
+
+No cache dir found, using default cache location.
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|###3      | 1/3 [00:01<00:03,  1.62s/it]Loading checkpoint shards:  67%|######6   | 2/3 [00:03<00:01,  1.59s/it]Loading checkpoint shards: 100%|##########| 3/3 [00:03<00:00,  1.08s/it]
+Some weights of Qwen3ForCausalLM were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['lm_head.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+✓ Model loaded: Qwen/Qwen3-4B
+Added 392 tokens from prompt templates
+✓ Model output embeddings weight copied from input embeddings
+✓ Model vocabulary optimized for ARC: 226 tokens kept
+✓ Model vocabulary optimization applied
+100개의 샘플에 대해 평가를 시작합니다...
+평가 진행:   0%|          | 0/100 [00:00<?, ?it/s]Test Input:
+[[7 1 8 7 5 8 9 9]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 7 7 8 9 9]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 5 7 8 7 9]
+ [1 1 8 7 5 8 9 9]]
+
+Ground Truth:
+[[9 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]]
+
+`generation_config` default values have been modified to match model-specific defaults: {'temperature': 0.6, 'top_k': 20, 'top_p': 0.95, 'pad_token_id': 210, 'bos_token_id': 210, 'eos_token_id': [212, 210]}. If this is not desired, please set these values explicitly.
+--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 218.32it/s]파일 로딩:  15%|#5        | 46/300 [00:00<00:01, 227.00it/s]파일 로딩:  23%|##3       | 70/300 [00:00<00:01, 224.65it/s]파일 로딩:  31%|###1      | 93/300 [00:00<00:02, 92.84it/s] 파일 로딩:  38%|###7      | 113/300 [00:00<00:01, 112.46it/s]파일 로딩:  44%|####4     | 133/300 [00:00<00:01, 130.48it/s]파일 로딩:  53%|#####3    | 160/300 [00:01<00:00, 161.52it/s]파일 로딩:  61%|######1   | 184/300 [00:01<00:00, 180.14it/s]파일 로딩:  69%|######8   | 206/300 [00:01<00:01, 71.88it/s] 파일 로딩:  76%|#######6  | 228/300 [00:02<00:00, 89.03it/s]파일 로딩:  84%|########4 | 253/300 [00:02<00:00, 112.40it/s]파일 로딩:  92%|#########2| 276/300 [00:02<00:00, 99.66it/s] 파일 로딩: 100%|##########| 300/300 [00:02<00:00, 119.19it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/config.yaml
+Error executing job with overrides: ['evaluate.eval_name=base-model-qwen8b-test-aug-naive-custom-head', 'generate.grid_select_policy=naive']
+Traceback (most recent call last):
+  File "/home/top321902/code/intro_dl/term_project/skeleton/my_evaluate.py", line 133, in main
+    cfg_from_checkpoint = OmegaConf.load(config_path)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/top321902/code/intro_dl/term_project/skeleton/config.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 208.30it/s]파일 로딩:  15%|#5        | 46/300 [00:00<00:01, 220.21it/s]파일 로딩:  23%|##3       | 70/300 [00:00<00:01, 222.12it/s]파일 로딩:  31%|###1      | 93/300 [00:00<00:02, 94.70it/s] 파일 로딩:  39%|###8      | 116/300 [00:00<00:01, 119.45it/s]파일 로딩:  46%|####5     | 137/300 [00:00<00:01, 138.38it/s]파일 로딩:  55%|#####5    | 165/300 [00:01<00:00, 170.17it/s]파일 로딩:  63%|######3   | 189/300 [00:01<00:00, 186.97it/s]파일 로딩:  71%|#######   | 212/300 [00:01<00:01, 74.62it/s] 파일 로딩:  78%|#######8  | 234/300 [00:02<00:00, 92.13it/s]파일 로딩:  86%|########6 | 259/300 [00:02<00:00, 115.30it/s]파일 로딩:  93%|#########3| 279/300 [00:02<00:00, 98.47it/s] 파일 로딩:  99%|#########8| 296/300 [00:02<00:00, 109.11it/s]파일 로딩: 100%|##########| 300/300 [00:02<00:00, 119.33it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/config.yaml
+Error executing job with overrides: ['evaluate.eval_name=base-model-qwen8b-test-aug-naive-custom-head', 'generate.grid_select_policy=naive']
+Traceback (most recent call last):
+  File "/home/top321902/code/intro_dl/term_project/skeleton/my_evaluate.py", line 133, in main
+    cfg_from_checkpoint = OmegaConf.load(config_path)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/top321902/code/intro_dl/term_project/skeleton/config.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 208.54it/s]파일 로딩:  15%|#5        | 46/300 [00:00<00:01, 219.14it/s]파일 로딩:  24%|##3       | 71/300 [00:00<00:02, 86.84it/s] 파일 로딩:  32%|###1      | 95/300 [00:00<00:01, 113.48it/s]파일 로딩:  39%|###9      | 117/300 [00:00<00:01, 135.67it/s]파일 로딩:  46%|####5     | 137/300 [00:01<00:01, 150.27it/s]파일 로딩:  55%|#####5    | 165/300 [00:01<00:00, 180.77it/s]파일 로딩:  63%|######2   | 188/300 [00:01<00:00, 193.13it/s]파일 로딩:  70%|#######   | 211/300 [00:01<00:01, 74.35it/s] 파일 로딩:  77%|#######6  | 230/300 [00:02<00:00, 88.49it/s]파일 로딩:  85%|########4 | 254/300 [00:02<00:00, 110.77it/s]파일 로딩:  91%|#########1| 274/300 [00:02<00:00, 92.74it/s] 파일 로딩: 100%|##########| 300/300 [00:02<00:00, 117.93it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/artifacts/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
+--- Hydra Config from checkpoint (See model) ---
+model:
+  model_id: Qwen/Qwen3-4B
+  lora_rank: 16
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: true
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: aug-qwen4b-r16-no-test-aug-no-ttt
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 2
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-aug-baseline-qwen4b-r16-custom-head
+
+No cache dir found, using default cache location.
+Loading checkpoint shards:   0%|          | 0/3 [00:00<?, ?it/s]Loading checkpoint shards:  33%|###3      | 1/3 [00:01<00:02,  1.37s/it]Loading checkpoint shards:  67%|######6   | 2/3 [00:02<00:01,  1.32s/it]Loading checkpoint shards: 100%|##########| 3/3 [00:02<00:00,  1.12it/s]
+Some weights of Qwen3ForCausalLM were not initialized from the model checkpoint at Qwen/Qwen3-4B and are newly initialized: ['lm_head.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+✓ Model loaded: Qwen/Qwen3-4B
+Added 392 tokens from prompt templates
+✓ Model output embeddings weight copied from input embeddings
+✓ Model vocabulary optimized for ARC: 226 tokens kept
+✓ Model vocabulary optimization applied
+100개의 샘플에 대해 평가를 시작합니다...
+평가 진행:   0%|          | 0/100 [00:00<?, ?it/s]Test Input:
+[[7 1 8 7 5 8 9 9]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 7 7 8 9 9]
+ [1 1 8 7 7 8 7 7]
+ [1 1 8 5 7 8 7 9]
+ [1 1 8 7 5 8 9 9]]
+
+Ground Truth:
+[[9 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]
+ [1 1]]
+
+`generation_config` default values have been modified to match model-specific defaults: {'temperature': 0.6, 'top_k': 20, 'top_p': 0.95, 'pad_token_id': 210, 'bos_token_id': 210, 'eos_token_id': [212, 210]}. If this is not desired, please set these values explicitly.
+No valid grids found. Returning random grid.
+Predictions:
+[[8 9]
+ [6 5]
+ [0 5]
+ [9 6]
+ [6 7]
+ [4 8]
+ [0 9]]
+
+Score: 0
+평가 진행:   1%|1         | 1/100 [00:10<16:42, 10.13s/it]Test Input:
+[[8 8 2]
+ [8 5 8]
+ [2 2 8]]
+
+Ground Truth:
+[[8 8 2 2 8 8]
+ [8 5 8 2 5 8]
+ [2 2 8 8 8 2]
+ [2 8 8 8 2 2]
+ [8 5 2 8 5 8]
+ [8 8 2 2 8 8]]
+
+--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 209.59it/s]파일 로딩:  15%|#5        | 46/300 [00:00<00:01, 226.02it/s]파일 로딩:  23%|##3       | 70/300 [00:00<00:01, 229.81it/s]파일 로딩:  31%|###1      | 93/300 [00:00<00:02, 94.52it/s] 파일 로딩:  38%|###7      | 113/300 [00:00<00:01, 113.68it/s]파일 로딩:  45%|####4     | 134/300 [00:00<00:01, 133.46it/s]파일 로딩:  54%|#####4    | 162/300 [00:01<00:00, 166.25it/s]파일 로딩:  62%|######2   | 186/300 [00:01<00:00, 182.93it/s]파일 로딩:  69%|######9   | 208/300 [00:01<00:01, 73.23it/s] 파일 로딩:  77%|#######6  | 230/300 [00:02<00:00, 91.28it/s]파일 로딩:  85%|########5 | 255/300 [00:02<00:00, 114.73it/s]파일 로딩:  92%|#########1| 275/300 [00:02<00:00, 93.44it/s] 파일 로딩: 100%|##########| 300/300 [00:02<00:00, 119.43it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/artifacts/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
+--- Hydra Config from checkpoint (See model) ---
+model:
+  model_id: Qwen/Qwen3-4B
+  lora_rank: 16
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: true
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: aug-qwen4b-r16-no-test-aug-no-ttt
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 2
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-aug-baseline-qwen4b-r16-custom-head
+
+No cache dir found, using default cache location.
+tokenizer_config.json:   0%|          | 0.00/9.73k [00:00<?, ?B/s]tokenizer_config.json: 100%|##########| 9.73k/9.73k [00:00<00:00, 85.9MB/s]
+vocab.json:   0%|          | 0.00/2.78M [00:00<?, ?B/s]vocab.json: 100%|##########| 2.78M/2.78M [00:00<00:00, 6.44MB/s]vocab.json: 100%|##########| 2.78M/2.78M [00:00<00:00, 6.41MB/s]
+merges.txt:   0%|          | 0.00/1.67M [00:00<?, ?B/s]merges.txt: 100%|##########| 1.67M/1.67M [00:00<00:00, 12.0MB/s]merges.txt: 100%|##########| 1.67M/1.67M [00:00<00:00, 11.9MB/s]
+tokenizer.json:   0%|          | 0.00/11.4M [00:00<?, ?B/s]tokenizer.json:  27%|##7       | 3.12M/11.4M [00:01<00:03, 2.27MB/s]tokenizer.json: 100%|##########| 11.4M/11.4M [00:01<00:00, 7.97MB/s]
+config.json:   0%|          | 0.00/728 [00:00<?, ?B/s]config.json: 100%|##########| 728/728 [00:00<00:00, 9.82MB/s]
+model.safetensors.index.json:   0%|          | 0.00/32.9k [00:00<?, ?B/s]model.safetensors.index.json: 100%|##########| 32.9k/32.9k [00:00<00:00, 21.7MB/s]
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]
+model-00001-of-00005.safetensors:   0%|          | 0.00/4.00G [00:00<?, ?B/s][A
+
+model-00005-of-00005.safetensors:   0%|          | 0.00/1.24G [00:00<?, ?B/s][A[A
+
+
+model-00003-of-00005.safetensors:   0%|          | 0.00/3.96G [00:00<?, ?B/s][A[A[A
+
+
+
+model-00002-of-00005.safetensors:   0%|          | 0.00/3.99G [00:00<?, ?B/s][A[A[A[A
+
+
+
+
+model-00004-of-00005.safetensors:   0%|          | 0.00/3.19G [00:00<?, ?B/s][A[A[A[A[A
+
+model-00005-of-00005.safetensors:   0%|          | 143k/1.24G [00:05<12:09:52, 28.4kB/s][A[A--- Hydra Config (See generate/evaluate) ---
+model:
+  model_id: Qwen/Qwen3-0.6B
+  lora_rank: 128
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: false
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: base-model-qwen8b-test-aug-naive-custom-head
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 4
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-augment-qwen0.6b-rank16
+
+[38;5;4mℹ Loading data...[0m
+파일 로딩:   0%|          | 0/300 [00:00<?, ?it/s]파일 로딩:   7%|7         | 22/300 [00:00<00:01, 204.26it/s]파일 로딩:  16%|#5        | 47/300 [00:00<00:01, 228.25it/s]파일 로딩:  23%|##3       | 70/300 [00:00<00:01, 226.37it/s]파일 로딩:  31%|###1      | 93/300 [00:00<00:02, 93.88it/s] 파일 로딩:  37%|###7      | 112/300 [00:00<00:01, 111.38it/s]파일 로딩:  44%|####3     | 131/300 [00:00<00:01, 127.08it/s]파일 로딩:  53%|#####3    | 159/300 [00:01<00:00, 161.52it/s]파일 로딩:  61%|######    | 182/300 [00:01<00:00, 178.02it/s]파일 로딩:  68%|######8   | 204/300 [00:01<00:01, 70.54it/s] 파일 로딩:  75%|#######4  | 224/300 [00:02<00:00, 86.09it/s]파일 로딩:  82%|########2 | 247/300 [00:02<00:00, 106.67it/s]파일 로딩:  89%|########8 | 266/300 [00:02<00:00, 121.01it/s]파일 로딩:  95%|#########5| 285/300 [00:02<00:00, 101.90it/s]파일 로딩: 100%|##########| 300/300 [00:02<00:00, 117.77it/s]
+[38;5;2m✔ Loaded 100 samples.[0m
+[38;5;4mℹ Initializing solver...[0m
+Config path: /home/top321902/code/intro_dl/term_project/skeleton/artifacts/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
+--- Hydra Config from checkpoint (See model) ---
+model:
+  model_id: Qwen/Qwen3-4B
+  lora_rank: 16
+  lora_alpha: 64
+  use_custom_head: true
+dataset:
+  num_train_examples_per_task: 3
+  num_datapoints_per_task: 50
+  val_ratio: 0.05
+  seed: 1234
+train:
+  use_data_augmentation: true
+  num_train_epochs: 5
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: false
+  eval_strategy: steps
+  eval_steps: 10000
+  logging_strategy: steps
+  logging_steps: 100
+  report_to: none
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3
+  optim: paged_adamw_8bit
+  learning_rate: 5.0e-05
+  max_grad_norm: 1.0
+  lr_scheduler_type: linear
+  warmup_ratio: 0.05
+  fp16: true
+  resume_from_checkpoint: null
+  patience: 5
+  metric_for_best_model: eval_loss
+  greater_is_better: false
+  dataset_num_proc: 4
+evaluate:
+  num_samples: 100
+  visualize: false
+  num_workers: 4
+  eval_name: aug-qwen4b-r16-no-test-aug-no-ttt
+generate:
+  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
+  enable_ttt: true
+  use_data_augmentation_for_generation: true
+  num_augmentations: 10
+  batch_size_generation: 2
+  grid_select_policy: naive
+token: null
+workspace: /home/top321902/code/intro_dl/term_project
+cache_dir: null
+dataset_dir: ${workspace}/dataset
+artifacts_dir: ${workspace}/skeleton/artifacts
+evaluation_dir: ${workspace}/evaluation
+artifact_name: train-aug-baseline-qwen4b-r16-custom-head
+
+No cache dir found, using default cache location.
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]
+model-00002-of-00005.safetensors:   0%|          | 0.00/3.99G [00:00<?, ?B/s][A
+
+model-00001-of-00005.safetensors:   0%|          | 0.00/4.00G [00:00<?, ?B/s][A[A
+
+
+model-00004-of-00005.safetensors:   0%|          | 0.00/3.19G [00:00<?, ?B/s][A[A[A
+
+
+
+model-00005-of-00005.safetensors:   0%|          | 0.00/1.24G [00:00<?, ?B/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   0%|          | 0.00/3.96G [00:00<?, ?B/s][A[A[A[A[A
+
+
+
+model-00005-of-00005.safetensors:   0%|          | 143k/1.24G [00:01<3:22:32, 102kB/s][A[A[A[A
+model-00002-of-00005.safetensors:   0%|          | 2.38M/3.99G [00:15<7:12:13, 154kB/s][A
+
+
+
+model-00005-of-00005.safetensors:   0%|          | 143k/1.24G [00:15<3:22:32, 102kB/s][A[A[A[A
+model-00002-of-00005.safetensors:   0%|          | 2.38M/3.99G [00:25<7:12:13, 154kB/s][A
+model-00002-of-00005.safetensors:   0%|          | 8.66M/3.99G [00:37<4:30:51, 245kB/s][A
+
+
+model-00004-of-00005.safetensors:   0%|          | 12.4M/3.19G [00:55<3:56:26, 224kB/s][A[A[A
+model-00002-of-00005.safetensors:   0%|          | 8.66M/3.99G [00:55<4:30:51, 245kB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   0%|          | 9.32M/3.96G [00:57<6:45:17, 162kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   1%|          | 25.0M/3.19G [01:04<1:59:19, 442kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   1%|          | 25.0M/3.19G [01:15<1:59:19, 442kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   0%|          | 9.32M/3.96G [01:15<6:45:17, 162kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   1%|          | 27.3M/3.96G [01:29<3:12:55, 340kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   0%|          | 18.5M/3.99G [01:32<5:35:57, 197kB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   1%|          | 34.2M/3.96G [01:33<2:27:53, 442kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   1%|          | 37.1M/3.99G [01:42<2:24:36, 456kB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   1%|          | 34.2M/3.96G [01:45<2:27:53, 442kB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:   1%|          | 24.9M/4.00G [01:48<4:48:41, 229kB/s][A[A
+
+
+
+model-00005-of-00005.safetensors:   2%|1         | 19.2M/1.24G [01:54<2:01:23, 168kB/s][A[A[A[A
+model-00002-of-00005.safetensors:   1%|          | 37.1M/3.99G [01:55<2:24:36, 456kB/s][A
+
+model-00001-of-00005.safetensors:   1%|          | 25.8M/4.00G [01:56<5:01:11, 220kB/s][A[A
+model-00002-of-00005.safetensors:   2%|1         | 60.3M/3.99G [02:00<1:34:21, 695kB/s][A
+
+
+
+model-00005-of-00005.safetensors:   2%|1         | 19.2M/1.24G [02:05<2:01:23, 168kB/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   1%|1         | 58.1M/3.96G [02:12<2:03:19, 527kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   2%|1         | 60.3M/3.99G [02:15<1:34:21, 695kB/s][A
+
+model-00001-of-00005.safetensors:   1%|          | 25.8M/4.00G [02:15<5:01:11, 220kB/s][A[A
+model-00002-of-00005.safetensors:   2%|1         | 67.1M/3.99G [02:24<1:59:55, 546kB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   1%|1         | 58.1M/3.96G [02:25<2:03:19, 527kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   2%|1         | 67.1M/3.99G [02:35<1:59:55, 546kB/s][A
+model-00002-of-00005.safetensors:   2%|1         | 67.1M/3.99G [02:49<3:01:14, 361kB/s][A
+
+
+model-00004-of-00005.safetensors:   1%|          | 25.1M/3.19G [02:52<8:15:25, 106kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   2%|1         | 59.4M/3.19G [02:59<2:03:35, 422kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   2%|1         | 59.7M/3.19G [03:00<2:03:52, 421kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   2%|2         | 64.0M/3.19G [03:04<1:51:15, 468kB/s][A[A[A
+model-00002-of-00005.safetensors:   2%|1         | 67.3M/3.99G [03:04<3:55:01, 278kB/s][A
+model-00002-of-00005.safetensors:   2%|2         | 93.1M/3.99G [03:05<1:18:37, 827kB/s][A
+
+
+model-00004-of-00005.safetensors:   3%|3         | 101M/3.19G [03:09<41:22, 1.24MB/s]  [A[A[A
+model-00002-of-00005.safetensors:   2%|2         | 94.8M/3.99G [03:15<1:18:35, 827kB/s][A
+model-00002-of-00005.safetensors:   3%|3         | 137M/3.99G [03:15<39:31, 1.63MB/s]  [A
+
+
+model-00004-of-00005.safetensors:   3%|3         | 105M/3.19G [03:23<55:03, 933kB/s] [A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   2%|2         | 83.2M/3.96G [03:34<2:44:10, 394kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   3%|3         | 137M/3.99G [03:35<39:31, 1.63MB/s][A
+
+
+model-00004-of-00005.safetensors:   3%|3         | 105M/3.19G [03:35<55:03, 933kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   2%|2         | 83.7M/3.96G [03:42<2:55:20, 368kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   2%|2         | 85.7M/3.96G [03:49<3:00:11, 358kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   3%|3         | 110M/3.19G [03:55<1:31:41, 559kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   3%|3         | 110M/3.19G [04:05<1:31:41, 559kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   2%|2         | 86.2M/3.96G [04:05<3:00:09, 358kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   4%|3         | 144M/3.99G [04:05<1:30:24, 710kB/s][A
+
+
+model-00004-of-00005.safetensors:   4%|3         | 123M/3.19G [04:15<1:27:36, 583kB/s][A[A[A
+model-00002-of-00005.safetensors:   4%|3         | 144M/3.99G [04:25<1:30:24, 710kB/s][A
+
+
+model-00004-of-00005.safetensors:   4%|3         | 123M/3.19G [04:25<1:27:36, 583kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   4%|4         | 136M/3.19G [04:27<1:14:25, 683kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   2%|2         | 96.2M/3.96G [04:27<3:17:05, 327kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   3%|3         | 138M/3.96G [04:35<1:13:46, 863kB/s] [A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   4%|3         | 144M/3.96G [04:36<1:05:47, 966kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   4%|4         | 136M/3.19G [04:45<1:14:24, 683kB/s][A[A[A
+model-00002-of-00005.safetensors:   4%|3         | 154M/3.99G [04:51<2:10:56, 489kB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   4%|3         | 145M/3.96G [04:55<1:05:47, 966kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   4%|4         | 163M/3.99G [05:03<2:00:35, 529kB/s][A
+model-00002-of-00005.safetensors:   4%|4         | 179M/3.99G [05:08<1:26:53, 732kB/s][A
+
+
+
+model-00005-of-00005.safetensors:   3%|3         | 37.6M/1.24G [05:12<2:55:45, 114kB/s][A[A[A[A
+model-00002-of-00005.safetensors:   5%|4         | 187M/3.99G [05:21<1:30:13, 703kB/s][A
+model-00002-of-00005.safetensors:   5%|4         | 187M/3.99G [05:23<1:32:37, 685kB/s][A
+
+
+
+model-00005-of-00005.safetensors:   3%|3         | 37.6M/1.24G [05:25<2:55:45, 114kB/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   4%|3         | 155M/3.96G [05:27<2:00:18, 527kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   6%|5         | 231M/3.99G [05:28<33:55, 1.85MB/s] [A
+
+
+model-00004-of-00005.safetensors:   6%|5         | 178M/3.19G [05:28<1:13:04, 686kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   5%|5         | 198M/3.96G [05:36<58:47, 1.07MB/s] [A[A[A[A[A
+model-00002-of-00005.safetensors:   7%|6         | 266M/3.99G [05:41<29:04, 2.14MB/s][A
+
+
+model-00004-of-00005.safetensors:   6%|5         | 178M/3.19G [05:45<1:13:04, 686kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   5%|5         | 209M/3.96G [05:49<1:01:06, 1.02MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   6%|5         | 189M/3.19G [05:51<1:18:41, 635kB/s][A[A[A
+model-00002-of-00005.safetensors:   7%|6         | 266M/3.99G [05:55<29:04, 2.14MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   5%|5         | 212M/3.96G [05:56<1:06:57, 933kB/s] [A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   6%|6         | 192M/3.19G [06:03<1:27:12, 573kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   6%|5         | 227M/3.96G [06:06<58:28, 1.06MB/s] [A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   7%|6         | 222M/3.19G [06:13<52:06, 949kB/s]  [A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   6%|5         | 233M/3.96G [06:15<1:03:37, 976kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   7%|6         | 222M/3.19G [06:25<52:06, 949kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   6%|5         | 233M/3.96G [06:25<1:03:37, 976kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   8%|7         | 242M/3.19G [06:36<53:15, 922kB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:   8%|8         | 263M/3.19G [06:42<40:11, 1.21MB/s][A[A[A
+model-00002-of-00005.safetensors:   7%|6         | 275M/3.99G [06:44<1:25:19, 726kB/s][A
+
+
+model-00004-of-00005.safetensors:   8%|8         | 263M/3.19G [06:48<45:33, 1.07MB/s][A[A[A
+model-00002-of-00005.safetensors:   7%|6         | 275M/3.99G [06:55<1:25:19, 726kB/s][A
+
+
+model-00004-of-00005.safetensors:   8%|8         | 266M/3.19G [06:57<56:13, 866kB/s] [A[A[A
+model-00002-of-00005.safetensors:   7%|7         | 299M/3.99G [07:01<1:10:22, 875kB/s][A
+model-00002-of-00005.safetensors:   8%|7         | 316M/3.99G [07:11<1:00:30, 1.01MB/s][A
+
+
+model-00004-of-00005.safetensors:   8%|8         | 266M/3.19G [07:15<56:13, 866kB/s][A[A[A
+model-00002-of-00005.safetensors:   8%|8         | 333M/3.99G [07:22<54:59, 1.11MB/s]  [A
+
+
+
+model-00005-of-00005.safetensors:   4%|4         | 56.0M/1.24G [07:22<2:38:14, 125kB/s][A[A[A[A
+
+
+
+model-00005-of-00005.safetensors:   5%|4         | 56.1M/1.24G [07:25<2:40:02, 124kB/s][A[A[A[A
+
+model-00001-of-00005.safetensors:   2%|1         | 67.7M/4.00G [07:30<7:50:42, 139kB/s][A[A
+
+model-00001-of-00005.safetensors:   3%|3         | 135M/4.00G [07:33<2:49:38, 379kB/s] [A[A
+model-00002-of-00005.safetensors:   8%|8         | 333M/3.99G [07:35<54:59, 1.11MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:   6%|6         | 256M/3.96G [07:40<2:17:19, 449kB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:   9%|8         | 359M/3.99G [07:40<50:44, 1.19MB/s][A
+
+model-00001-of-00005.safetensors:   3%|3         | 135M/4.00G [07:45<2:49:38, 379kB/s][A[A
+
+
+
+model-00005-of-00005.safetensors:   5%|4         | 56.1M/1.24G [07:45<2:40:02, 124kB/s][A[A[A[A
+
+model-00001-of-00005.safetensors:   5%|5         | 202M/4.00G [07:50<1:35:14, 664kB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:   6%|6         | 256M/3.96G [07:53<2:38:15, 390kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   8%|7         | 314M/3.96G [07:53<47:17, 1.28MB/s] [A[A[A[A[A
+model-00002-of-00005.safetensors:   9%|8         | 359M/3.99G [07:55<50:44, 1.19MB/s][A
+
+model-00001-of-00005.safetensors:   5%|5         | 202M/4.00G [08:05<1:35:14, 664kB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:   8%|7         | 314M/3.96G [08:05<47:17, 1.28MB/s][A[A[A[A[A
+
+
+
+model-00005-of-00005.safetensors:  10%|9         | 123M/1.24G [08:07<43:33, 429kB/s]   [A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   8%|8         | 325M/3.96G [08:19<1:02:16, 973kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   8%|8         | 326M/3.96G [08:20<1:03:26, 955kB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   9%|8         | 286M/3.19G [08:22<2:01:01, 400kB/s][A[A[A
+
+
+
+model-00005-of-00005.safetensors:  10%|9         | 123M/1.24G [08:25<43:33, 429kB/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:   9%|9         | 371M/3.96G [08:28<33:00, 1.81MB/s] [A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  10%|9         | 383M/3.96G [08:30<29:01, 2.05MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  11%|#1        | 450M/3.96G [08:33<13:08, 4.45MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:   9%|8         | 286M/3.19G [08:35<2:01:01, 400kB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#1        | 473M/3.96G [08:36<11:53, 4.89MB/s][A[A[A[A[A
+
+
+
+model-00005-of-00005.safetensors:  15%|#5        | 190M/1.24G [08:36<23:30, 748kB/s][A[A[A[A
+
+
+model-00004-of-00005.safetensors:  10%|#         | 324M/3.19G [08:39<1:05:55, 724kB/s][A[A[A
+model-00002-of-00005.safetensors:  10%|9         | 386M/3.99G [08:41<1:20:11, 750kB/s][A
+model-00002-of-00005.safetensors:  10%|9         | 386M/3.99G [08:43<1:22:31, 729kB/s][A
+model-00002-of-00005.safetensors:  10%|9         | 395M/3.99G [08:45<1:09:28, 863kB/s][A
+
+
+model-00004-of-00005.safetensors:  10%|#         | 325M/3.19G [08:55<1:05:55, 724kB/s][A[A[A
+
+
+
+model-00005-of-00005.safetensors:  15%|#5        | 190M/1.24G [08:55<23:30, 748kB/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#1        | 473M/3.96G [08:55<11:53, 4.89MB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:  12%|#1        | 462M/3.99G [08:59<30:15, 1.94MB/s] [A
+model-00002-of-00005.safetensors:  12%|#2        | 487M/3.99G [09:01<23:22, 2.50MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#2        | 477M/3.96G [09:02<31:16, 1.86MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  11%|#1        | 361M/3.19G [09:04<50:30, 933kB/s]  [A[A[A
+
+
+
+model-00005-of-00005.safetensors:  21%|##        | 257M/1.24G [09:04<15:28, 1.06MB/s][A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#2        | 477M/3.96G [09:04<32:41, 1.77MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#2        | 482M/3.96G [09:07<32:48, 1.77MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  12%|#1        | 376M/3.19G [09:12<46:06, 1.02MB/s][A[A[A
+model-00002-of-00005.safetensors:  13%|#2        | 503M/3.99G [09:13<26:54, 2.16MB/s][A
+
+
+
+model-00005-of-00005.safetensors:  21%|##        | 257M/1.24G [09:15<15:28, 1.06MB/s][A[A[A[A
+
+
+model-00004-of-00005.safetensors:  14%|#3        | 443M/3.19G [09:22<23:26, 1.95MB/s][A[A[A
+
+model-00001-of-00005.safetensors:   7%|6         | 269M/4.00G [09:24<1:30:44, 685kB/s][A[A
+model-00002-of-00005.safetensors:  13%|#2        | 503M/3.99G [09:25<26:54, 2.16MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:  12%|#2        | 482M/3.96G [09:25<32:48, 1.77MB/s][A[A[A[A[A
+model-00002-of-00005.safetensors:  14%|#4        | 570M/3.99G [09:28<19:27, 2.93MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:  13%|#2        | 514M/3.96G [09:32<39:55, 1.44MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  16%|#5        | 510M/3.19G [09:33<15:48, 2.82MB/s][A[A[A
+
+model-00001-of-00005.safetensors:   7%|6         | 269M/4.00G [09:35<1:30:44, 685kB/s][A[A
+
+model-00001-of-00005.safetensors:   8%|8         | 336M/4.00G [09:36<1:00:36, 1.01MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  18%|#7        | 573M/3.19G [09:37<10:38, 4.10MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  18%|#8        | 579M/3.19G [09:38<10:23, 4.18MB/s][A[A[A
+model-00002-of-00005.safetensors:  14%|#4        | 570M/3.99G [09:45<19:27, 2.93MB/s][A
+
+
+
+
+model-00003-of-00005.safetensors:  13%|#2        | 514M/3.96G [09:45<39:55, 1.44MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  19%|#8        | 598M/3.19G [09:50<13:29, 3.20MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  21%|##        | 666M/3.19G [09:51<07:04, 5.94MB/s][A[A[A
+
+model-00001-of-00005.safetensors:   8%|8         | 336M/4.00G [09:55<1:00:36, 1.01MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  14%|#3        | 536M/3.96G [09:55<46:06, 1.24MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:   9%|8         | 340M/4.00G [09:56<1:07:51, 898kB/s] [A[A
+model-00002-of-00005.safetensors:  14%|#4        | 578M/3.99G [10:04<39:06, 1.46MB/s][Amodel-00002-of-00005.safetensors:  14%|#4        | 578M/3.99G [10:05<59:39, 954kB/s] 
+
+
+
+model-00004-of-00005.safetensors:  21%|##        | 666M/3.19G [10:05<07:04, 5.94MB/s][A[A[Amodel-00005-of-00005.safetensors:  21%|##        | 257M/1.24G [10:10<39:00, 422kB/s] 
+
+
+
+
+
+model-00003-of-00005.safetensors:  14%|#3        | 536M/3.96G [10:15<46:06, 1.24MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:   9%|8         | 340M/4.00G [10:15<1:07:51, 898kB/s][A[A
+
+
+model-00004-of-00005.safetensors:  23%|##2       | 733M/3.19G [10:17<10:36, 3.86MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  24%|##3       | 763M/3.19G [10:21<09:21, 4.32MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  14%|#3        | 548M/3.96G [10:21<1:01:05, 931kB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  16%|#5        | 615M/3.96G [10:33<28:57, 1.93MB/s] [A[A[A[A[A
+
+model-00001-of-00005.safetensors:  10%|#         | 407M/4.00G [10:33<52:28, 1.14MB/s] [A[A
+
+
+model-00004-of-00005.safetensors:  24%|##3       | 763M/3.19G [10:35<09:21, 4.32MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  25%|##5       | 799M/3.19G [10:43<13:16, 3.00MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  26%|##6       | 830M/3.19G [10:45<10:18, 3.81MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  16%|#5        | 615M/3.96G [10:45<28:57, 1.93MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  10%|#         | 407M/4.00G [10:45<52:28, 1.14MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  16%|#5        | 627M/3.96G [10:47<33:37, 1.65MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  12%|#1        | 474M/4.00G [10:47<36:48, 1.59MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  26%|##6       | 830M/3.19G [10:55<10:18, 3.81MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  27%|##7       | 869M/3.19G [10:57<10:51, 3.56MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  16%|#5        | 627M/3.96G [11:05<33:37, 1.65MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  12%|#1        | 474M/4.00G [11:05<36:48, 1.59MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  27%|##7       | 869M/3.19G [11:15<10:51, 3.56MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  16%|#6        | 649M/3.96G [11:16<44:32, 1.24MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  17%|#6        | 669M/3.96G [11:23<37:17, 1.47MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  28%|##7       | 883M/3.19G [11:32<22:07, 1.74MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  29%|##9       | 930M/3.19G [11:34<13:42, 2.74MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  17%|#6        | 669M/3.96G [11:35<37:17, 1.47MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  19%|#8        | 736M/3.96G [11:37<22:30, 2.39MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  29%|##9       | 930M/3.19G [11:45<13:42, 2.74MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  20%|#9        | 778M/3.96G [11:47<19:09, 2.77MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  14%|#3        | 541M/4.00G [11:59<45:02, 1.28MB/s][A[A
+
+model-00001-of-00005.safetensors:  14%|#3        | 547M/4.00G [12:05<45:15, 1.27MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  20%|#9        | 778M/3.96G [12:05<19:09, 2.77MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  21%|##1       | 845M/3.96G [12:07<17:15, 3.01MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  31%|###1      | 997M/3.19G [12:10<16:19, 2.24MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  22%|##2       | 878M/3.96G [12:12<15:11, 3.38MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  14%|#4        | 572M/4.00G [12:13<39:33, 1.44MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  23%|##2       | 908M/3.96G [12:15<12:29, 4.07MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  24%|##3       | 936M/3.96G [12:21<12:09, 4.14MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  14%|#4        | 574M/4.00G [12:24<46:06, 1.24MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  24%|##4       | 963M/3.96G [12:24<10:31, 4.75MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  31%|###1      | 997M/3.19G [12:25<16:19, 2.24MB/s][A[A[A
+
+model-00001-of-00005.safetensors:  14%|#4        | 574M/4.00G [12:29<50:11, 1.14MB/s][A[A
+
+model-00001-of-00005.safetensors:  16%|#6        | 641M/4.00G [12:30<20:05, 2.78MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  25%|##5       | 1.00G/3.96G [12:31<09:27, 5.21MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  33%|###3      | 1.06G/3.19G [12:34<14:26, 2.45MB/s][A[A[A
+
+model-00001-of-00005.safetensors:  16%|#6        | 646M/4.00G [12:39<24:34, 2.27MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  34%|###4      | 1.10G/3.19G [12:40<12:29, 2.79MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  25%|##5       | 1.00G/3.96G [12:45<09:27, 5.21MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  16%|#6        | 649M/4.00G [12:53<36:39, 1.52MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  34%|###4      | 1.10G/3.19G [12:55<12:29, 2.79MB/s][A[A[A
+
+model-00001-of-00005.safetensors:  17%|#6        | 665M/4.00G [12:58<30:58, 1.79MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  36%|###6      | 1.15G/3.19G [13:08<13:57, 2.43MB/s][A[A[A
+
+model-00001-of-00005.safetensors:  17%|#6        | 665M/4.00G [13:15<30:58, 1.79MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  26%|##6       | 1.03G/3.96G [13:19<28:36, 1.71MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  37%|###7      | 1.19G/3.19G [13:20<13:07, 2.54MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  28%|##7       | 1.10G/3.96G [13:20<15:18, 3.11MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  28%|##8       | 1.13G/3.96G [13:25<13:20, 3.54MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  30%|###       | 1.19G/3.96G [13:27<08:35, 5.37MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  37%|###7      | 1.19G/3.19G [13:35<13:07, 2.54MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  32%|###1      | 1.26G/3.96G [13:40<08:24, 5.36MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  33%|###2      | 1.29G/3.96G [13:42<06:54, 6.43MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  17%|#6        | 678M/4.00G [13:46<1:12:12, 766kB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  33%|###2      | 1.29G/3.96G [13:55<06:54, 6.43MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  17%|#7        | 699M/4.00G [14:01<1:00:25, 909kB/s][A[A
+
+model-00001-of-00005.safetensors:  18%|#8        | 737M/4.00G [14:02<31:40, 1.72MB/s] [A[A
+
+
+
+
+model-00003-of-00005.safetensors:  34%|###4      | 1.36G/3.96G [14:08<10:34, 4.10MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  19%|#8        | 749M/4.00G [14:14<36:17, 1.49MB/s][A[A
+
+model-00001-of-00005.safetensors:  20%|##        | 817M/4.00G [14:17<15:38, 3.39MB/s][A[A
+
+model-00001-of-00005.safetensors:  21%|##        | 829M/4.00G [14:22<16:47, 3.14MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  34%|###4      | 1.36G/3.96G [14:25<10:34, 4.10MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  35%|###5      | 1.40G/3.96G [14:27<13:09, 3.25MB/s][A[A[A[A[A
+
+model-00001-of-00005.safetensors:  21%|##        | 834M/4.00G [14:33<23:41, 2.23MB/s][A[A
+
+
+model-00004-of-00005.safetensors:  39%|###9      | 1.25G/3.19G [14:38<22:31, 1.43MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  41%|####1     | 1.32G/3.19G [14:39<14:17, 2.18MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  36%|###6      | 1.44G/3.96G [14:43<13:42, 3.07MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  43%|####2     | 1.36G/3.19G [14:44<11:22, 2.68MB/s][A[A[A
+
+model-00001-of-00005.safetensors:  21%|##        | 834M/4.00G [14:45<23:41, 2.23MB/s][A[A
+
+
+
+
+model-00003-of-00005.safetensors:  37%|###7      | 1.48G/3.96G [14:46<10:39, 3.88MB/s][A[A[A[A[Amodel-00001-of-00005.safetensors:  21%|##        | 834M/4.00G [14:48<56:05, 939kB/s] 
+Fetching 5 files:   0%|          | 0/5 [14:48<?, ?it/s]
+
+
+
+model-00004-of-00005.safetensors:  43%|####2     | 1.36G/3.19G [14:55<11:22, 2.68MB/s][A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  37%|###7      | 1.48G/3.96G [15:05<10:39, 3.88MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  39%|###9      | 1.55G/3.96G [15:23<14:48, 2.72MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  41%|####      | 1.61G/3.96G [15:28<10:27, 3.74MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  42%|####1     | 1.66G/3.96G [15:30<08:06, 4.73MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  43%|####3     | 1.71G/3.96G [15:44<08:20, 4.49MB/s][A[A[A[A[A
+
+
+
+
+model-00003-of-00005.safetensors:  45%|####4     | 1.78G/3.96G [15:50<06:28, 5.61MB/s][A[A[A[A[A
+
+
+model-00004-of-00005.safetensors:  45%|####4     | 1.43G/3.19G [15:51<17:35, 1.67MB/s][A[A[Amodel-00003-of-00005.safetensors:  45%|####4     | 1.78G/3.96G [15:54<19:29, 1.86MB/s]
+
+
+
+model-00004-of-00005.safetensors:  47%|####6     | 1.49G/3.19G [15:58<12:06, 2.33MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  48%|####8     | 1.54G/3.19G [16:10<10:57, 2.51MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  48%|####8     | 1.54G/3.19G [16:25<10:57, 2.51MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  49%|####9     | 1.57G/3.19G [16:53<16:10, 1.67MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  51%|#####1    | 1.63G/3.19G [16:59<10:34, 2.45MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  53%|#####3    | 1.70G/3.19G [17:14<08:25, 2.94MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  54%|#####3    | 1.72G/3.19G [17:18<07:52, 3.11MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  56%|#####6    | 1.79G/3.19G [17:22<05:15, 4.44MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  58%|#####8    | 1.85G/3.19G [17:29<03:58, 5.59MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  60%|######    | 1.92G/3.19G [17:30<02:37, 8.03MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  60%|######    | 1.92G/3.19G [17:45<02:37, 8.03MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  61%|######1   | 1.95G/3.19G [18:22<08:19, 2.47MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  63%|######3   | 2.02G/3.19G [18:30<05:56, 3.28MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  65%|######5   | 2.09G/3.19G [18:36<04:14, 4.34MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  67%|######6   | 2.13G/3.19G [18:42<03:45, 4.69MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  68%|######8   | 2.17G/3.19G [18:49<03:24, 4.97MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  70%|#######   | 2.24G/3.19G [19:05<03:23, 4.67MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  71%|#######   | 2.26G/3.19G [19:08<03:06, 4.97MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  73%|#######2  | 2.33G/3.19G [19:18<02:35, 5.52MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  75%|#######5  | 2.39G/3.19G [19:24<01:57, 6.78MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  77%|#######7  | 2.46G/3.19G [19:34<01:49, 6.65MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  77%|#######7  | 2.46G/3.19G [19:45<01:49, 6.65MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  79%|#######8  | 2.52G/3.19G [19:52<02:13, 5.03MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  81%|########1 | 2.58G/3.19G [19:53<01:23, 7.23MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  83%|########3 | 2.65G/3.19G [19:55<00:56, 9.49MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  85%|########5 | 2.72G/3.19G [19:57<00:37, 12.7MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  87%|########6 | 2.76G/3.19G [19:58<00:29, 14.7MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  87%|########6 | 2.77G/3.19G [19:59<00:28, 14.4MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  89%|########8 | 2.83G/3.19G [19:59<00:17, 21.0MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  91%|######### | 2.89G/3.19G [20:00<00:10, 29.3MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  93%|#########2| 2.96G/3.19G [20:01<00:05, 39.3MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  95%|#########4| 3.03G/3.19G [20:04<00:05, 29.3MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  97%|#########7| 3.09G/3.19G [20:09<00:04, 22.2MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  98%|#########7| 3.12G/3.19G [20:18<00:06, 10.8MB/s][A[A[A
+
+
+model-00004-of-00005.safetensors:  98%|#########7| 3.12G/3.19G [20:35<00:06, 10.8MB/s][A[A[A

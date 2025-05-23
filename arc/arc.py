@@ -253,11 +253,13 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
+        use_peft_model: bool = True,
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 5,
-        batch_size_generation: int = 2,
+        num_augmentations: int = 14,
+        batch_size_generation: int = 14,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
+        **kwargs,
     ):
         """
         Load pretrained weight, make model eval mode, etc.
@@ -268,19 +270,20 @@ class ARCSolver:
         self.batch_size_generation = batch_size_generation
         self.grid_select_policy = grid_select_policy
         
-        try:
-            # Note: checkpoint config should be match with the model config used in intialization
-            self.peft_model = PeftModel.from_pretrained(
-                self.base_model,
-                checkpoint_path, 
-                is_trainable=enable_ttt,
-            )
-            print("Loaded LoRA adapter and tokenizer from checkpoint.")
-            self.peft_model.eval()
-        except Exception as e:
-            print(f"No LoRA adapter found or incompatible: {e}")
-            traceback.print_exc()
-            raise e
+        if use_peft_model:
+            try:
+                # Note: checkpoint config should be match with the model config used in intialization
+                self.peft_model = PeftModel.from_pretrained(
+                    self.base_model,
+                    checkpoint_path, 
+                    is_trainable=enable_ttt,
+                )
+                print("Loaded LoRA adapter and tokenizer from checkpoint.")
+                self.peft_model.eval()
+            except Exception as e:
+                print(f"No LoRA adapter found or incompatible: {e}")
+                traceback.print_exc()
+                raise e
 
 if __name__ == "__main__":
     solver = ARCSolver()

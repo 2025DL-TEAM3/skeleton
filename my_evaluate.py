@@ -103,12 +103,6 @@ def main(cfg: DictConfig):
     from arc import ARCSolver
     from datasets import Dataset
 
-    artifacts_dir = cfg.artifacts_dir
-    checkpoint_path = cfg.generate.checkpoint_path
-    # rel_path = os.path.relpath(checkpoint_path, artifacts_dir)
-    # artifact_name = rel_path.split(os.sep)[0]
-    # checkpoint_name = rel_path.split(os.sep)[-1]
-    eval_name = cfg.evaluate.eval_name
     log_file_path = os.path.join(
         cfg.evaluation_dir, f"{cfg.evaluate.eval_name}-log.txt"
     )
@@ -127,8 +121,7 @@ def main(cfg: DictConfig):
     
     msg.info("Initializing solver...")
     
-    pparent_dir = os.path.dirname(os.path.dirname(checkpoint_path)) # train_artifacts_dir
-    config_path = os.path.join(pparent_dir, "config.yaml")
+    config_path = cfg.generate.config_path
     print(f"Config path: {config_path}")
     cfg_from_checkpoint = OmegaConf.load(config_path)
     print("--- Hydra Config from checkpoint (See model) ---")
