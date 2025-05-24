@@ -41,7 +41,10 @@ class SaveModelCallback(TrainerCallback):
         if step > 0 and step % self.save_steps == 0:
             path = os.path.join(self.solver.checkpoint_save_path, f"checkpoint-step-{step}")
             # Save LoRA adapter
-            self.solver.peft_model.save_pretrained(path)
+            if self.solver.peft_model is not None:
+                self.solver.peft_model.save_pretrained(path)
+            else:
+                self.solver.base_model.save_pretrained(path)
             # Save LM head weights
             lm_head_path = os.path.join(path, "lm_head_weights.pt")
             self.solver.save_lm_head(lm_head_path)
@@ -283,7 +286,10 @@ class ARCSolver:
         callbacks = []
         if eval_dataset is not None and patience > 0:
             callbacks.append(
-                EarlyStoppingCallback(...)
+                EarlyStoppingCallback(
+                    early_stopping_patience=patience,
+                    early_stopping_threshold=0.0
+                )
             )
         # Use our custom callback
         save_steps = train_args_dict.get("save_steps", 100)
@@ -330,15 +336,15 @@ class ARCSolver:
                 callbacks=callbacks if callbacks else None,
             )
         
+        self.peft_model = trainer.model
         
         if self.finetune_lm_head and lm_head_lr is not None:
-            peft_model = trainer.model
-            for n, p in peft_model.base_model.named_parameters():
+            for n, p in self.peft_model.base_model.named_parameters():
                 p.requires_grad = False
 
             lora_params = []
             lm_head_params = []
-            for n, p in peft_model.named_parameters():
+            for n, p in self.peft_model.named_parameters():
                 if "lora" in n.lower():
                     p.requires_grad = True
                     lora_params.append(p)
