@@ -14,19 +14,10 @@ def set_random_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
 
-def get_max_grid_shape(datapoint: DataPointDict) -> tuple[int, int]:
-    all_inputs = [ex['input'] for ex in datapoint['train']] + [ex['input'] for ex in datapoint['test']]
-    max_rows = max(len(g) for g in all_inputs)
-    max_cols = max(len(g[0]) for g in all_inputs)
-    return max_rows, max_cols
-
 def _get_grid_augmentation_map() -> dict[str,tuple[Callable[[Grid], Grid], Callable]]:
     return {
         "geometric": (geometric_augmentation, get_random_geometric_augmentation_params),
         "color": (color_permutation, get_random_color_permutation_params),
-        "upscale": (upscale, get_random_upscale_params),
-        "padding": (add_padding, get_random_padding_params),
-        "mirror": (mirror, get_random_mirror_params),
     }
 
 def grid_augmentation(grid: Grid, params_map: dict, augmentations_names: list[str]) -> Grid:
@@ -87,13 +78,9 @@ def revesre_datapoint_augmentation(datapoint: DataPointDict, params_map: dict) -
 def random_task_augmentation(datapoint: DataPointDict) -> DataPointDict:
     """Augment only one of input/output grids, resulting in different task"""
     augmentations_names = _get_grid_augmentation_map().keys()
-    max_grid_shape = get_max_grid_shape(datapoint)
     params_map = dict()
     for aug_name, (func, kwarg_generator) in _get_grid_augmentation_map().items():
-        if aug_name in ["upscale", "padding", "mirror"]:
-            kwargs = kwarg_generator(max_grid_shape=max_grid_shape)
-        else:
-            kwargs = kwarg_generator()
+        kwargs = kwarg_generator()
         params_map[aug_name] = (func, kwargs)
     
     target = random.choice(['input', 'output'])
@@ -193,114 +180,3 @@ def reverse_geometric_augmentation(grid: Grid, hflip: bool = True, n_rotations_9
 
 def get_random_geometric_augmentation_params():
     return dict(hflip=random.choice([True, False]), n_rotations_90=random.randint(0, 3))
-
-def upscale(grid: Grid, factor: tuple[int, int]) -> Grid:
-    grid_np = np.array(grid, dtype=np.int16)
-    upscaled = np.repeat(np.repeat(grid_np, factor[0], axis=0), factor[1], axis=1)
-    return upscaled.tolist()
-
-def get_random_upscale_params(
-    max_grid_shape: tuple[int, int], 
-    min_upscale: int = 2,
-    max_upscale: int = 4,
-    same_upscale_probability: float = 0.5,
-    n_tries: int = 10
-):
-    safe_max_upscale = (
-        min(MAX_GRID_SIZE // max_grid_shape[0], max_upscale),
-        min(MAX_GRID_SIZE // max_grid_shape[1], max_upscale)
-    )
-    
-    if random.random() < same_upscale_probability:
-        min_safe_max_upscale = min(safe_max_upscale)
-        if min_safe_max_upscale < min_upscale:
-            print("Warning: Grid is too large to upscale.")
-            return dict(factor=(1, 1))
-        _factor = random.randint(min_upscale, min_safe_max_upscale)
-        return dict(factor=(_factor, _factor))
-    else:
-        if min(safe_max_upscale) < min_upscale:
-            print("Warning: Grid is too large to upscale.")
-            return dict(factor=(1, 1))
-        factor = (1, 1)
-        for _ in range(n_tries):
-            factor = (
-                random.randint(min_upscale, safe_max_upscale[0]),
-                random.randint(min_upscale, safe_max_upscale[1])
-            )
-            if factor[0] != factor[1]:
-                break
-        return dict(factor=factor)
-
-def add_padding(grid: Grid, color: int = 0, size: tuple[int, int] = (0, 0)) -> Grid:
-    grid_np = np.array(grid, dtype=np.int16)
-    padded = np.pad(
-        grid_np,
-        pad_width=((size[0], size[0]), (size[1], size[1])),
-        mode='constant',
-        constant_values=color
-    )
-    return padded.tolist()
-
-def get_random_padding_params(
-    max_grid_shape: tuple[int, int], 
-    same_size_probability: float = 0.5,
-    max_padding: int = 5,
-    n_tries: int = 10
-):
-    safe_max_padding = (
-        min(MAX_GRID_SIZE - max_grid_shape[0], max_padding),
-        min(MAX_GRID_SIZE - max_grid_shape[1], max_padding)
-    )
-    
-    if random.random() < same_size_probability:
-        pad_limit = min(safe_max_padding)
-        if pad_limit < 1:
-            print("Warning: Grid is too large to add padding.")
-            return dict(color=0, size=(0,0))
-        size = random.randint(1, pad_limit)
-        size = (size, size)
-    else:
-        if min(safe_max_padding) < 1:
-            print("Warning: Grid is too large to add padding.")
-            return dict(color=0, size=(0,0))
-        for _ in range(n_tries):
-            size = (random.randint(1, safe_max_padding[0]), random.randint(1, safe_max_padding[1]))
-            if size[0] != size[1]:
-                break
-    color = random.randint(0, 9)
-    return dict(color=color, size=size)
-
-def mirror(grid: Grid, axis: Literal["horizontal", "vertical"] | None = None, position: int = 0) -> Grid:
-    if axis is None:
-        return deepcopy(grid)
-    
-    grid_np = np.array(grid)
-    if axis == 'horizontal':
-        mirrored = np.flip(grid_np, axis=0)
-        if position == 0:
-            merged = np.concatenate([grid_np, mirrored], axis=0)
-        else:
-            merged = np.concatenate([mirrored, grid_np], axis=0)
-    elif axis == 'vertical':
-        mirrored = np.flip(grid_np, axis=1)
-        if position == 0:
-            merged = np.concatenate([grid_np, mirrored], axis=1)
-        else:
-            merged = np.concatenate([mirrored, grid_np], axis=1)
-    else:
-        raise ValueError("Invalid axis. Choose 'horizontal' or 'vertical'.")
-    return merged.tolist()
-
-def get_random_mirror_params(max_grid_shape: tuple[int, int]):
-    if MAX_GRID_SIZE // max_grid_shape[0] < 2:
-        if MAX_GRID_SIZE // max_grid_shape[1] < 2:
-            print("Warning: Grid is too large to mirror.")
-            axis = None
-        else:
-            axis = 'vertical'
-    elif MAX_GRID_SIZE // max_grid_shape[1] < 2:
-        axis = 'horizontal'
-    else:
-        axis = random.choice(['horizontal', 'vertical'])
-    return dict(axis=axis, position=random.randint(0, 1))

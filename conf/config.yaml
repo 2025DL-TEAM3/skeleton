@@ -10,16 +10,16 @@ token: null
 
 # Define the root workspace directory
 # can be used for kubernetes
-workspace: /home/top321902/code/intro_dl/term_project
+workspace: /home2/yeonjae/test/workspace
 cache_dir: null
 
 # Paths based on workspace
 dataset_dir: ${workspace}/dataset
-artifacts_dir: ${workspace}/skeleton/artifacts
+artifacts_dir: ${workspace}/skeleton_yj/artifacts
 evaluation_dir: ${workspace}/evaluation
 
 # name of the training e.g. qwen4b-rank8
 # all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}
 # if not set, artifact_name will be `train-<timestamp>`
-artifact_name: train-augment-qwen0.6b-rank16
+artifact_name: test
 
