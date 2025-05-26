@@ -1,26 +1,26 @@
 train:
   use_data_augmentation: true
 
-  num_train_epochs: 5
-  per_device_train_batch_size: 1
-  per_device_eval_batch_size: 1
-  gradient_accumulation_steps: 4
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 2
   gradient_checkpointing: false
 
   eval_strategy: "steps"
-  eval_steps: 500
+  eval_steps: 1000
   logging_strategy: "steps"
   logging_steps: 100
   report_to: "none"
   save_strategy: "steps"
-  save_steps: 500
-  save_total_limit: 3
+  save_steps: 1000
+  save_total_limit: 5
 
   optim: "paged_adamw_8bit"
   learning_rate: 5e-5
   max_grad_norm: 1.0
-  lr_scheduler_type: "linear"
-  warmup_ratio: 0.05
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.2
 
   fp16: true
 
@@ -31,4 +31,4 @@ train:
   greater_is_better: false
   load_best_model_at_end: true
 
-  dataset_num_proc: 8
+  dataset_num_proc: 64

@@ -10,7 +10,7 @@ from .datatypes import *
 system_prompt = """You are a helpful AI assistant. Your job is to solve tasks from the Abstraction and Reasoning Challenge (ARC). 
 The user will present you with sample input and output grids for each task. 
 Your job will be to understand the transformation between the input and the output and apply it to the last input grid given by the user. 
-The puzzle-like inputs and outputs present a grid where each square can be one of ten colors. A grid can be any height or width between 1x1 and 30x30.
+The puzzle-like inputs and outputs present a grid where each square can be one of ten colors. A grid can be any height or width between 1x1 and 10x10.
 The background of the grid is typically colored with 0.
 The tasks from ARC are based on the following priors:
 
@@ -147,7 +147,37 @@ def sample_datapoints_from_normal_task(
         "train": train_examples,
         "test": [test_example],
     }
+    
+def sample_datapoints_from_normal_task_no_replacement(
+    task: TaskDict,
+    num_samples: int = 4,
+    num_datapoints: int = 50,
+) -> List[DataPointDict]:
+    examples = task["examples"]
+    total_available = len(examples)
+    max_datapoints = total_available // num_samples
+    
+    actual_datapoints = min(num_datapoints, max_datapoints)
+    total_required = actual_datapoints * num_samples
+    
+    shuffled = random.sample(examples, total_required)
+    datapoints: List[DataPointDict] = []
+    
+    for i in range(actual_datapoints):
+        start_index = i * num_samples
+        end_index = start_index + num_samples
+        sampled_examples = shuffled[start_index:end_index]
 
+        train_examples = sampled_examples[:num_samples - 1]
+        test_example = sampled_examples[num_samples - 1]
+        
+        datapoints.append({
+            "train": train_examples,
+            "test": [test_example],
+        })
+    
+    return datapoints
+    
 def datapoint_to_prompt_completion_pair(
     datapoint: DataPointDict,
     reasoning_start_token: str = "<think>",
@@ -238,3 +268,14 @@ def print_grid(grid: Grid):
 def chunked(it: List, n: int) -> Iterator[List]:
     it = iter(it)
     return iter(lambda: list(islice(it, n)), [])
+
+class Tee:
+    def __init__(self, *files):
+        self.files = files
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
+            f.flush()
+    def flush(self):
+        for f in self.files:
+            f.flush()

@@ -165,7 +165,7 @@ class ARCSolver:
             output_dir=self.checkpoint_save_path,
             logging_dir=self.logging_save_path,
             log_level="debug",
-            max_length=None, # avoid truncation
+            max_seq_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
             **train_args_dict,
         )

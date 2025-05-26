@@ -13,19 +13,10 @@ import pandas as pd
 import json
 
 from arc import arc_utils
+from arc.arc_utils import Tee
 
 import sys
 
-class Tee:
-    def __init__(self, *files):
-        self.files = files
-    def write(self, obj):
-        for f in self.files:
-            f.write(obj)
-            f.flush()
-    def flush(self):
-        for f in self.files:
-            f.flush()
 
 def check_match(pred, truth):
     pred = np.array(pred, dtype=np.uint8)
@@ -103,6 +94,9 @@ def main(cfg: DictConfig):
     from arc import ARCSolver
     from datasets import Dataset
 
+    assert cfg.evaluate.eval_name, "Evaluation name must be specified in the config file."
+
+    os.makedirs(cfg.evaluation_dir, exist_ok=True)
     log_file_path = os.path.join(
         cfg.evaluation_dir, f"{cfg.evaluate.eval_name}-log.txt"
     )

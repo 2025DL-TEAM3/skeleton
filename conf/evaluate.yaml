@@ -3,4 +3,4 @@ evaluate:
   visualize: false
   # seed: 1234567890
   num_workers: 4
-  eval_name: "aug-qwen4b-r16-no-test-aug-no-ttt"
+  eval_name: ""
