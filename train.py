@@ -16,8 +16,9 @@ def main(cfg: DictConfig):
     train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
     os.makedirs(train_artifacts_dir, exist_ok=True)
     
+    os.makedirs(os.path.join(train_artifacts_dir, "logs"), exist_ok=True)
     log_file_path = os.path.join(
-        train_artifacts_dir, f"train-log-redirected.txt"
+        train_artifacts_dir, "logs", f"train-log-redirected.txt"
     )
     
     sys.stdout = sys.stderr = Tee(sys.stdout, open(log_file_path, "a"))
