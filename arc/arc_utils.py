@@ -9,26 +9,18 @@ from datasets import Dataset as HFDataset
 from .datatypes import *
 
 # system prompt
-system_prompt = """You are a helpful AI assistant. Your job is to solve tasks from the Abstraction and Reasoning Challenge (ARC). 
-The user will present you with sample input and output grids for each task. 
-Your job will be to understand the transformation between the input and the output and apply it to the last input grid given by the user. 
-The puzzle-like inputs and outputs present a grid where each square can be one of ten colors. A grid can be any height or width between 1x1 and 10x10.
-The background of the grid is typically colored with 0.
-The tasks from ARC are based on the following priors:
-
-- Objectness: Objects persist and cannot appear or disappear without reason. Objects can interact or not depending on the circumstances.
-- Goal-directed: Objects can be animate or inanimate. Some objects are "agents" - they have intentions and they pursue goals.
-- Numbers & counting: Objects can be counted or sorted by their shape, appearance, or movement using basic mathematics like addition, subtraction, and comparison.
-- Basic geometry & topology: Objects can be shapes like rectangles, triangles, and circles which can be mirrored, rotated, translated, deformed, combined, repeated, etc. Differences in distances can be detected.
-
-The transformations between input and output should be based on these priors.
-"""
+system_prompt = (
+    "You are an expert at solving puzzles from the Abstraction and Reasoning Corpus (ARC). "
+    "From three input/output examples, infer the transformation rule "
+    "and apply it to a new test grid."
+)
 
 # user prompt 1: examples
-user_message_template1 = """Let's see if you can solve this simple ARC task. These are some input-output grid examples that define the task.
-There are {n} example{plural} in total. Here they are:
+user_message_template1 = """Here are {n} example pair{plural}:
 
 {examples}
+
+Observe how each input becomes its output.
 """
 
 # user prompt 2: test input
