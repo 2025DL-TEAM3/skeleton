@@ -1,6 +1,6 @@
 model:
-  model_id: Qwen/Qwen3-4B
-  lora_rank: 16
+  model_id: Qwen/Qwen3-4B-Base
+  lora_rank: 128
   lora_alpha: 16
   use_custom_head: true
   finetune_lm_head: true  # LM head를 직접 fine-tune할지 여부 (true면 LoRA 대신 직접 학습)

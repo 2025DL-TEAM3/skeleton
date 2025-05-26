@@ -5,26 +5,9 @@ from itertools import islice
 from typing import List, Dict, Any, Tuple, Union, Optional, Iterator
 
 from .datatypes import *
+from transformers import PreTrainedTokenizer
 
-# system prompt
-system_prompt = """\
-You are an expert ARC solver. 
-Given a few input→output grid examples, infer the transformation rule and apply it to the test grid.
-Grids are up to 10×10, colors encoded as digits 0–9, background is 0."""
-
-# ─── 2) User Prompt: Examples ────────────────────────────────────────────────
-user_message_template1 = """\
-Here are {n} example{plural}:
-
-{examples_block}"""
-
-# ─── 3) User Prompt: Test Input ─────────────────────────────────────────────
-user_message_template2 = """\
-Now apply the learned rule to this test input:
-{test_grid}"""
-
-# ─── 4) User Prompt: Output Format ───────────────────────────────────────────
-user_message_template3 = "Only return the resulting grid as rows of digits (no spaces, no extra text):"
+from trl import DataCollatorForCompletionOnlyLM
 
 def load_tasks_from_paths(json_paths: list[str]) -> list[TaskDict]:
     all_tasks = []
@@ -76,50 +59,52 @@ def sample_datapoints_from_normal_task(
 
 def datapoint_to_prompt_completion_pair(
     datapoint: DataPointDict,
+    tokenizer: PreTrainedTokenizer,
+    input_start: str,
+    input_end: str,
+    output_end: str,
+    preprompt: str = "",
 ) -> PromptCompletionPair:
     # TODO : for now, use only the first one
-    test_output_grid = datapoint["test"][0]["output"]
-    test_output_text = stringify_grid(test_output_grid)
+    input_text = format_prompt_messages(datapoint, tokenizer, input_start, input_end, output_end, preprompt)
 
-    input_messages = format_prompt_messages(datapoint)
-    output_message = [
-        {"role": "assistant", "content": test_output_text}
-    ]
+    if datapoint["test"][0]["output"] is not None:
+        test_output_grid = datapoint["test"][0]["output"]
+        label_text = stringify_grid_output(test_output_grid, end = output_end)
+    else:
+        label_text = ""
 
-    return {
-        "prompt": input_messages,
-        "completion": output_message,
-    }
+    full_text = input_text + label_text
 
-def stringify_grid(grid: Grid) -> str:
-    return "\n".join(" ".join(str(cell) for cell in row) for row in grid)
+    ret =dict()
+    ret["train"] = input_text
+    ret["reply"] = label_text
+    ret["text"] = full_text
+
+    return ret
+
+def stringify_grid_input(grid: Grid, start: str = "\n", end: str = "\n") -> str:
+    grid_str = "\n".join("".join(str(cell) for cell in row) for row in grid)
+    return start + grid_str + end
+
+def stringify_grid_output(grid: Grid, end: str = "\n") -> str:
+    grid_str = "\n".join("".join(str(cell) for cell in row) for row in grid)
+    return grid_str + end
 
 def gridify_grid(grid: str) -> Grid:
-    return [[int(cell) for cell in row.split()] for row in grid.strip().split("\n")]
+    data = [[int(x) for x in row if x.isdigit()] for row in grid.strip().split("\n")]
+    return [row for row in data if len(row)]
 
-def format_prompt_messages(datapoint: DataPointDict) -> list[ChatEntry]:
-    examples_block = ""
+def format_prompt_messages(datapoint: DataPointDict, tokenizer: PreTrainedTokenizer,input_start: str, input_end: str, output_end: str, preprompt="ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjklmnpqrstuvwxyz") -> list[ChatEntry]:
+    examples_block = preprompt
     for i, ex in enumerate(datapoint["train"], start=1):
-        in_txt  = stringify_grid(ex["input"])
-        out_txt = stringify_grid(ex["output"])
-        examples_block += f"Example {i}:\nInput:\n{in_txt}\nOutput:\n{out_txt}\n\n"
+        in_txt  = stringify_grid_input(ex["input"], start = input_start, end = input_end)
+        out_txt = stringify_grid_output(ex["output"], end = output_end)
+        examples_block += in_txt + out_txt
 
-    test_in_txt = stringify_grid(datapoint["test"][0]["input"])
+    test_in_txt = stringify_grid_input(datapoint["test"][0]["input"], start = input_start, end = input_end)
 
-    user_msg = "\n".join([
-        user_message_template1.format(
-            n=len(datapoint["train"]),
-            plural="s" if len(datapoint["train"]) != 1 else "",
-            examples_block=examples_block
-        ),
-        user_message_template2.format(test_grid=test_in_txt),
-        user_message_template3
-    ])
-
-    return [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_msg}
-    ]
+    return examples_block + test_in_txt
 
 
 def is_peft_checkpoint_path(checkpoint_path: str) -> bool:
@@ -148,3 +133,40 @@ def print_grid(grid: Grid):
 def chunked(it: List, n: int) -> Iterator[List]:
     it = iter(it)
     return iter(lambda: list(islice(it, n)), [])
+
+class InputMaskingDataCollator(DataCollatorForCompletionOnlyLM):
+    def __init__(self, mask_first_n_examples=0, **kwargs):
+        super().__init__(**kwargs)
+        self.mask_first_n_examples = mask_first_n_examples
+
+    def torch_call(self, examples):
+        batch = super().torch_call(examples)  # call super, masking all inputs
+        for i in range(len(batch['labels'])):
+            # 마스킹되지 않은 값(-100이 아닌 값)이 있는지 확인
+            if (batch['labels'][i] != -100).any():
+                for _ in range(self.mask_first_n_examples):
+                    # mask first still unmasked output block
+                    nonzero_indices = (batch['labels'][i] != -100).nonzero()
+                    if nonzero_indices.numel() == 0:  # 모든 값이 -100인 경우
+                        break
+                    
+                    beg_pos = nonzero_indices.min().item()
+                    
+                    # 첫 번째 마스킹된 위치 찾기
+                    masked_indices = (batch['labels'][i][beg_pos:] == -100).nonzero()
+                    if masked_indices.numel() == 0:  # 뒷부분에 -100이 없는 경우
+                        batch['labels'][i][beg_pos:] = -100  # 모두 마스킹
+                        break
+                        
+                    mid_pos = masked_indices.min().item() + beg_pos
+                    
+                    # 마지막 마스킹되지 않은 위치 찾기
+                    last_nonzero = (batch['labels'][i] != -100).nonzero()
+                    if last_nonzero.numel() == 0:  # 모든 값이 -100인 경우
+                        break
+                        
+                    end_pos = last_nonzero.max().item() + 1
+                    
+                    if mid_pos < end_pos:
+                        batch['labels'][i][beg_pos:mid_pos] = -100
+        return batch

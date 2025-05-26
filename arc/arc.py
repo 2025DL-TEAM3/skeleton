@@ -25,6 +25,7 @@ from peft import LoraConfig, PeftModel
 
 from . import arc_utils, data_transform, data_augmentation, inference_helpers
 from .datatypes import *
+from .arc_utils import InputMaskingDataCollator
 
 
 class SaveModelCallback(TrainerCallback):
@@ -69,7 +70,7 @@ class ARCSolver:
     def __init__(
         self, 
         token: str = None,
-        config_path: str = "artifacts/qwen3_4b_rank64/config.yaml",
+        config_path: str = "artifacts/test/config.yaml",
     ):
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
@@ -140,12 +141,22 @@ class ARCSolver:
         ).to(self.device)
         print(f"✓ Model loaded: {self.model_id}")
 
+        self.fmt_opts = dict(
+            preprompt='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjklmnpqrstuvwxyz',
+            input_start='I',
+            input_end='\n+/-=O',
+            output_end='\n' + self.tokenizer.eos_token,
+            max_tokens=8192,
+        )
+
         # Optimize model vocabulary for ARC tasks if enabled
         if use_custom_head:
             from .custom_head import apply_custom_head
             # Only keep necessary tokens (digits, thinking tokens, special tokens)
-            apply_custom_head(self.base_model, self.tokenizer)
-            print(f"✓ Model vocabulary optimization applied")
+            keep_tok = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.:,;*+/-=')+self.tokenizer.tokenize('\n')
+            apply_custom_head(self.base_model, self.tokenizer, keep_tokens = keep_tok, fmt_opts=self.fmt_opts)
+            print(self.tokenizer)
+            print(f"✓ Model vocabulary optimization applied and tokenizer cache cleared")
         else:
             print("Model vocabulary optimization skipped.")
 
@@ -157,6 +168,7 @@ class ARCSolver:
             lora_dropout=0.1,
             target_modules=target_modules,
             bias="none",
+            use_rslora=True,
         )
         self.peft_model = None
         
@@ -301,12 +313,21 @@ class ARCSolver:
             log_level="debug",
             max_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
+            dataset_text_field="text",
             **train_args_dict,
         )
-        
-        transform = data_transform.get_data_transform(use_data_augmentation)
+
+        transform = data_transform.get_data_transform(use_data_augmentation, tokenizer=self.tokenizer, fmt_opts=self.fmt_opts)
         transform_name = transform.__class__.__name__
         msg.info(f"Using transform: {transform_name}")  
+
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
+        )
         
         train_dataset = train_dataset.map(
             transform,
@@ -325,13 +346,14 @@ class ARCSolver:
         
         start_time = time.time()
         msg.info("Using SFTTrainer for training.")
-
+        
         trainer = SFTTrainer(
                 model=self.base_model if self.peft_model is None else self.peft_model,
                 processing_class=self.tokenizer,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 args=sft_training_args,
+                data_collator=data_collator,
                 peft_config=self.peft_config,
                 callbacks=callbacks if callbacks else None,
             )
@@ -433,7 +455,7 @@ class ARCSolver:
 
     def prepare_evaluation(
         self,
-        checkpoint_path: str = "artifacts/qwen3_4b_attn_ffn_lora_rank64/checkpoints/checkpoint-step-7000",
+        checkpoint_path: str = "artifacts/test/checkpoints/checkpoint-step-2000",
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 10,
