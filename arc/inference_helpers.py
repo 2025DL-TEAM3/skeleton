@@ -22,6 +22,7 @@ class ARCInferencer:
         self.model = model
         self.tokenizer = tokenizer
         self.generation_config = generation_config
+        self.model.generation_config = generation_config
         self.parse_grid_fn = parse_grid_fn
         self.device = model.device
 

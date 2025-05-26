@@ -177,6 +177,27 @@ def sample_datapoints_from_normal_task_no_replacement(
         })
     
     return datapoints
+
+def sample_from_multiple_normal_tasks(
+    tasks: List[TaskDict],
+    num_samples: int = 4,
+    num_datapoints_per_task: int = 50,
+    replace: bool = False,
+) -> List[DataPointDict]:
+    if replace:
+        return [
+            sample_datapoints_from_normal_task(task, num_samples=num_samples)
+            for task in tasks
+            for _ in range(num_datapoints_per_task)
+        ]
+    else:
+        all_datapoints = []
+        for task in tasks:
+            sampled_datapoints = sample_datapoints_from_normal_task_no_replacement(
+                task, num_samples=num_samples, num_datapoints=num_datapoints_per_task
+            )
+            all_datapoints.extend(sampled_datapoints)
+        return all_datapoints
     
 def datapoint_to_prompt_completion_pair(
     datapoint: DataPointDict,

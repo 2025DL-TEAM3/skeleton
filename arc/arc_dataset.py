@@ -25,30 +25,19 @@ def build_hf_train_val_dataset(
     train_tasks = arc_utils.load_tasks_from_paths(train_file_paths)
     val_tasks = arc_utils.load_tasks_from_paths(val_file_paths)
     
-    # train_datapoints = [
-    #     arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1)
-    #     for task in train_tasks
-    #     for _ in range(num_datapoints_per_task)
-    # ]
+    train_datapoints = arc_utils.sample_from_multiple_normal_tasks(
+        train_tasks,
+        num_samples=num_train_examples_per_normal_task + 1,
+        num_datapoints=num_datapoints_per_task,
+        replace=False,
+    )
     
-    # val_datapoints = [
-    #     arc_utils.sample_datapoints_from_normal_task(task, num_samples=num_train_examples_per_normal_task + 1)
-    #     for task in val_tasks
-    #     for _ in range(num_datapoints_per_task)
-    # ]
-    train_datapoints = [
-        arc_utils.sample_datapoints_from_normal_task_no_replacement(
-            task, num_samples=num_train_examples_per_normal_task + 1, num_datapoints=num_datapoints_per_task
-        )
-        for task in train_tasks
-    ]
-    
-    val_datapoints = [
-        arc_utils.sample_datapoints_from_normal_task_no_replacement(
-            task, num_samples=num_train_examples_per_normal_task + 1, num_datapoints=num_datapoints_per_task
-        )
-        for task in val_tasks
-    ]
+    val_datapoints = arc_utils.sample_from_multiple_normal_tasks(
+        val_tasks,
+        num_samples=num_train_examples_per_normal_task + 1,
+        num_datapoints=num_datapoints_per_task,
+        replace=False,
+    )
     
     train_dataset = HFDataset.from_list(train_datapoints)
     val_dataset = HFDataset.from_list(val_datapoints)
