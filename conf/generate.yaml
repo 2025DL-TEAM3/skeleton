@@ -4,6 +4,5 @@ generate:
   
   enable_ttt: false
   use_data_augmentation_for_generation: true
-  num_augmentations: 10
-  batch_size_generation: 5
+  num_augmentations: 8
   grid_select_policy: naive # naive, grid-wise, cell-wise-argmax

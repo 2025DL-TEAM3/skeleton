@@ -65,13 +65,12 @@ class ARCInferencer:
         return_logits: bool = False
     ) -> List[List[int]] | List[tuple[List[int], torch.Tensor]]:
         prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in batch_datapoints]
-        prompt_strs = [
+        prompt_strs: List[str] = [
             self.tokenizer.apply_chat_template(
                 prompt_msg,
                 tokenize=False,
                 add_generation_prompt=True,
                 continue_final_message=False,
-                enable_thinking=False,
             )
             for prompt_msg in prompt_messages
         ]
@@ -92,6 +91,7 @@ class ARCInferencer:
                 generation_config=self.generation_config,
                 return_dict_in_generate=return_logits,
                 output_scores=return_logits,
+                use_cache=True,
             )
         
         if not return_logits:
@@ -215,7 +215,6 @@ class ARCInferencer:
         self,
         base_datapoint: DataPointDict,
         num_augmentations: int = 1,
-        batch_size_generation: int = 1,
         grid_select_policy: str = "naive",
     ) -> Grid:
         augmented = self._augment_datapoint(base_datapoint, num_augmentations)
@@ -223,11 +222,7 @@ class ARCInferencer:
         datapoints, params_maps = list(datapoints), list(params_maps)
 
         if grid_select_policy == "naive":
-            candidate_ids = []
-            for batch in arc_utils.chunked(augmented, batch_size_generation):
-                batch_datpoints = [dp for dp, _ in batch]
-                batch_output_ids = self._generate(batch_datpoints, return_logits=False)
-                candidate_ids.extend(batch_output_ids)
+            candidate_ids: List[List[int]] = self._generate(datapoints, return_logits=False)
             grids = []
             for ids in candidate_ids:
                 try:
@@ -242,11 +237,7 @@ class ARCInferencer:
                 return np.random.randint(0, 10, (x, y))
             return self._vote_select(self._reverse_grids(grids, params_maps))
         else:
-            candidate_ids_logits = []
-            for batch in arc_utils.chunked(augmented, batch_size_generation):
-                batch_datpoints = [dp for dp, _ in batch]
-                batch_output_ids_logits = self._generate(batch_datpoints, return_logits=True)
-                candidate_ids_logits.extend(batch_output_ids_logits)
+            candidate_ids_logits: List[tuple[List[int], torch.Tensor]] = self._generate(datapoints, return_logits=True)
 
             if grid_select_policy == "grid-wise":
                 selected_grid = self._grid_wise_select(candidate_ids_logits, params_maps)

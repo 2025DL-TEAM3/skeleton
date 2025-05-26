@@ -26,11 +26,9 @@ from .datatypes import *
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
     
-    if cfg.artifact_name is  None:
-        now = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        cfg.artifact_name = f"train-{now}"
+    assert cfg.artifact_name, "Artifact name must be specified in the config file."
+    os.makedirs(cfg.artifacts_dir, exist_ok=True)
     train_artifacts_dir = os.path.join(cfg.artifacts_dir, cfg.artifact_name)
-    
     os.makedirs(train_artifacts_dir, exist_ok=True)
     cfg.train_artifacts_dir = train_artifacts_dir
     cfg_dict = OmegaConf.to_container(cfg, resolve=True)
@@ -63,24 +61,23 @@ class ARCSolver:
         self.checkpoint_save_path = os.path.join(self.train_artifacts_dir, "checkpoints")
         self.logging_save_path = os.path.join(self.train_artifacts_dir, "logs")
 
-        # Configure the BitsAndBytes settings for 4-bit quantization to reduce memory usage
         bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,  # Enable 4-bit quantization
-            bnb_4bit_use_double_quant=True,  # Use double quantization for improved precision
-            bnb_4bit_quant_type="nf4",  # Specify the quantization type
-            bnb_4bit_compute_dtype=torch.float16,  # Set the computation data type
+            load_in_4bit=True, 
+            bnb_4bit_use_double_quant=True,  
+            bnb_4bit_quant_type="nf4",  
+            bnb_4bit_compute_dtype=torch.float16, 
         )
         
         self.model_args = {
             "pretrained_model_name_or_path": model_id,
-            "trust_remote_code": True,  # Allow the model to use custom code from the repository
-            "quantization_config": bnb_config,  # Apply the 4-bit quantization configuration
-            "attn_implementation": "sdpa",  # Use scaled-dot product attention for better performance
-            "torch_dtype": torch.float16,  # Set the data type for the model
-            "use_cache": False,  # Disable caching to save memory
+            "trust_remote_code": True, 
+            "quantization_config": bnb_config,  
+            "attn_implementation": "sdpa", 
+            "torch_dtype": torch.float16,  
+            "use_cache": False,  
             "token": token,
             "tie_word_embeddings": not use_custom_head,
-            # "device_map": "auto",  # Automatically map the model to available devices
+            # "device_map": "auto",  
         }
         if cache_dir is not None:
             print(f"Using cache dir: {cache_dir}")
@@ -113,6 +110,8 @@ class ARCSolver:
             print(f"✓ Model vocabulary optimization applied")
         else:
             print("Model vocabulary optimization skipped.")
+        self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
+        self.base_model.config.eos_token_id = self.tokenizer.eos_token_id
 
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
@@ -128,10 +127,14 @@ class ARCSolver:
         self.enable_ttt = False
         
         self.generation_config = GenerationConfig(
-            max_new_tokens=1024,
-            do_sample=True,   
+            max_new_tokens=200,
+            do_sample=True,
+            temperature=0.5,
+            top_p=0.8,
+            top_k=30,
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
         )
-        self.batch_size_generation = 1
         self.grid_select_policy = "naive"
         
         self.augmented_dataset_dir = augmented_dataset_dir
@@ -276,7 +279,6 @@ class ARCSolver:
         return inferencer.predict(
             base_datapoint,
             num_augmentations=self.num_augmentations,
-            batch_size_generation=self.batch_size_generation,
             grid_select_policy=self.grid_select_policy,
         )
 
@@ -286,7 +288,6 @@ class ARCSolver:
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 10,
-        batch_size_generation: int = 5,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
         **kwargs,
     ):
@@ -296,7 +297,6 @@ class ARCSolver:
         self.enable_ttt = enable_ttt
         self.use_data_augmentation_for_generation = use_data_augmentation_for_generation
         self.num_augmentations = num_augmentations
-        self.batch_size_generation = batch_size_generation
         self.grid_select_policy = grid_select_policy
 
         generation_config_msg = (
@@ -305,7 +305,6 @@ class ARCSolver:
             f"- enable_ttt: {enable_ttt}\n"
             f"- use_data_augmentation_for_generation: {use_data_augmentation_for_generation}\n"
             f"- num_augmentations: {num_augmentations}\n"
-            f"- batch_size_generation: {batch_size_generation}\n"
             f"- grid_select_policy: {grid_select_policy}\n"
         )
         print(generation_config_msg)
