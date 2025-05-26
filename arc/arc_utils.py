@@ -159,8 +159,8 @@ def sample_datapoints_from_normal_task_no_replacement(
     total_available = len(examples)
     max_datapoints = total_available // num_samples
     
-    # actual_datapoints = min(num_datapoints, max_datapoints)
-    actual_datapoints = max_datapoints # XXX: use all available datapoints
+    actual_datapoints = min(num_datapoints, max_datapoints)
+    # actual_datapoints = max_datapoints # XXX: use all available datapoints
     total_required = actual_datapoints * num_samples
     
     shuffled = random.sample(examples, total_required)
@@ -238,12 +238,12 @@ def save_augmented_dataset_to_jsonl(
 def load_augmented_dataset_from_jsonl(
     dataset_path: str,
 ) -> HFDataset:
-    # example_list = []
-    # with open(dataset_path, 'r', encoding='utf-8') as f:
-    #     for line in f:
-    #         example_list.append(json.loads(line.strip()))
-    # return HFDataset.from_list(example_list)
-    return HFDataset.from_json(dataset_path, keep_in_memory=True)
+    example_list = []
+    with open(dataset_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            example_list.append(json.loads(line.strip()))
+    return HFDataset.from_list(example_list)
+    # return HFDataset.from_json(dataset_path, keep_in_memory=True)
 
 def stringify_grid(grid: Grid) -> str:
     return "\n".join(" ".join(str(cell) for cell in row) for row in grid)

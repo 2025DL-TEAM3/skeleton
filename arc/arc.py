@@ -50,7 +50,8 @@ class ARCSolver:
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
         lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
         target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
-        augmented_dataset_path = cfg.get("augmented_dataset_path", None)
+        augmented_dataset_dir = cfg.get("augmented_dataset_dir", "augmented_dataset")
+        use_cached_augmented_dataset = cfg.get("use_cached_augmented_dataset", True)
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -133,7 +134,9 @@ class ARCSolver:
         self.batch_size_generation = 1
         self.grid_select_policy = "naive"
         
-        self.augmented_dataset_path = augmented_dataset_path
+        self.augmented_dataset_dir = augmented_dataset_dir
+        os.makedirs(self.augmented_dataset_dir, exist_ok=True)
+        self.use_cached_augmented_dataset = use_cached_augmented_dataset
         
         
     def parse_grid(self, ids: List[int]) -> Grid:
@@ -153,7 +156,6 @@ class ARCSolver:
         """
         os.makedirs(self.checkpoint_save_path, exist_ok=True)
         os.makedirs(self.logging_save_path, exist_ok=True)
-        use_data_augmentation = train_args_dict.pop("use_data_augmentation", False)
         patience = train_args_dict.pop("patience", 5)
         callbacks = []
         if eval_dataset is not None and patience > 0:
@@ -173,18 +175,18 @@ class ARCSolver:
             **train_args_dict,
         )
         
-        transform = data_transform.get_data_transform(use_data_augmentation)
+        transform = data_transform.get_data_transform()
         transform_name = transform.__class__.__name__
         msg.info(f"Using transform: {transform_name}")  
         
-        if self.augmented_dataset_path is not None:
+        if self.use_cached_augmented_dataset and os.path.isfile(os.path.join(self.augmented_dataset_dir, "train.jsonl")):
             # load from augmented dataset
-            print("Loading train dataset from augmented dataset path.")
+            print(f"Loading train dataset from cached augmented dataset path: {self.augmented_dataset_dir}")
             train_dataset = arc_utils.load_augmented_dataset_from_jsonl(
-                os.path.join(self.augmented_dataset_path, "train.jsonl"),
+                os.path.join(self.augmented_dataset_dir, "train.jsonl"),
             )
         else:
-            print("No augmented dataset path provided, applying transform to train dataset.")
+            print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to train dataset.")
             train_dataset = train_dataset.map(
                 transform,
                 remove_columns=train_dataset.column_names,
@@ -193,18 +195,18 @@ class ARCSolver:
             )
             arc_utils.save_augmented_dataset_to_jsonl(
                 train_dataset, 
-                os.path.join(self.augmented_dataset_path, "train.jsonl"),
+                os.path.join(self.augmented_dataset_dir, "train.jsonl"),
             )
         
         if eval_dataset is not None:
-            if self.augmented_dataset_path is not None:
+            if self.use_cached_augmented_dataset and os.path.isfile(os.path.join(self.augmented_dataset_dir, "eval.jsonl")):
                 # load from augmented dataset
-                print("Loading eval dataset from augmented dataset path.")
+                print(f"Loading eval dataset from cached augmented dataset path: {self.augmented_dataset_dir}")
                 eval_dataset = arc_utils.load_augmented_dataset_from_jsonl(
-                    os.path.join(self.augmented_dataset_path, "eval.jsonl"),
+                    os.path.join(self.augmented_dataset_dir, "eval.jsonl"),
                 )
             else:
-                print("No augmented dataset path provided, applying transform to eval dataset.")
+                print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to eval dataset.")
                 eval_dataset = eval_dataset.map(
                     transform,
                     remove_columns=eval_dataset.column_names,
@@ -213,7 +215,7 @@ class ARCSolver:
                 )
                 arc_utils.save_augmented_dataset_to_jsonl(
                     eval_dataset, 
-                    os.path.join(self.augmented_dataset_path, "eval.jsonl"),
+                    os.path.join(self.augmented_dataset_dir, "eval.jsonl"),
                 )
             
         start_time = time.time()
