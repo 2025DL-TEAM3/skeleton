@@ -173,7 +173,7 @@ class ARCSolver:
             output_dir=self.checkpoint_save_path,
             logging_dir=self.logging_save_path,
             log_level="debug",
-            max_seq_length=None, # avoid truncation
+            max_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
             **train_args_dict,
         )
@@ -188,6 +188,7 @@ class ARCSolver:
             train_dataset = arc_utils.load_augmented_dataset_from_jsonl(
                 os.path.join(self.augmented_dataset_dir, "train.jsonl"),
             )
+            print(f"Loaded {len(train_dataset)} examples from cached augmented dataset.")
         else:
             print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to train dataset.")
             train_dataset = train_dataset.map(
@@ -208,6 +209,7 @@ class ARCSolver:
                 eval_dataset = arc_utils.load_augmented_dataset_from_jsonl(
                     os.path.join(self.augmented_dataset_dir, "eval.jsonl"),
                 )
+                print(f"Loaded {len(eval_dataset)} examples from cached augmented dataset.")
             else:
                 print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to eval dataset.")
                 eval_dataset = eval_dataset.map(
