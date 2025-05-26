@@ -50,6 +50,7 @@ class ARCSolver:
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
         lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
         target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
+        augmented_dataset_path = cfg.get("augmented_dataset_path", None)
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
@@ -132,6 +133,8 @@ class ARCSolver:
         self.batch_size_generation = 1
         self.grid_select_policy = "naive"
         
+        self.augmented_dataset_path = augmented_dataset_path
+        
         
     def parse_grid(self, ids: List[int]) -> Grid:
         decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
@@ -174,21 +177,45 @@ class ARCSolver:
         transform_name = transform.__class__.__name__
         msg.info(f"Using transform: {transform_name}")  
         
-        train_dataset = train_dataset.map(
-            transform,
-            remove_columns=train_dataset.column_names,
-            desc=f"Applying train dataset transform ({transform_name})",
-            num_proc=sft_training_args.dataset_num_proc,
-        )
-        
-        if eval_dataset is not None:
-            eval_dataset = eval_dataset.map(
+        if self.augmented_dataset_path is not None:
+            # load from augmented dataset
+            print("Loading train dataset from augmented dataset path.")
+            train_dataset = arc_utils.load_augmented_dataset_from_jsonl(
+                os.path.join(self.augmented_dataset_path, "train.jsonl"),
+            )
+        else:
+            print("No augmented dataset path provided, applying transform to train dataset.")
+            train_dataset = train_dataset.map(
                 transform,
-                remove_columns=eval_dataset.column_names,
-                desc=f"Applying eval dataset transform ({transform_name})",
+                remove_columns=train_dataset.column_names,
+                desc=f"Applying train dataset transform ({transform_name})",
                 num_proc=sft_training_args.dataset_num_proc,
             )
+            arc_utils.save_augmented_dataset_to_jsonl(
+                train_dataset, 
+                os.path.join(self.augmented_dataset_path, "train.jsonl"),
+            )
         
+        if eval_dataset is not None:
+            if self.augmented_dataset_path is not None:
+                # load from augmented dataset
+                print("Loading eval dataset from augmented dataset path.")
+                eval_dataset = arc_utils.load_augmented_dataset_from_jsonl(
+                    os.path.join(self.augmented_dataset_path, "eval.jsonl"),
+                )
+            else:
+                print("No augmented dataset path provided, applying transform to eval dataset.")
+                eval_dataset = eval_dataset.map(
+                    transform,
+                    remove_columns=eval_dataset.column_names,
+                    desc=f"Applying eval dataset transform ({transform_name})",
+                    num_proc=sft_training_args.dataset_num_proc,
+                )
+                arc_utils.save_augmented_dataset_to_jsonl(
+                    eval_dataset, 
+                    os.path.join(self.augmented_dataset_path, "eval.jsonl"),
+                )
+            
         start_time = time.time()
         msg.info("Using SFTTrainer for training.")
         trainer = SFTTrainer(

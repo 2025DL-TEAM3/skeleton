@@ -4,6 +4,8 @@ from itertools import islice
 
 from typing import List, Dict, Any, Tuple, Union, Optional, Iterator
 
+from datasets import Dataset as HFDataset
+
 from .datatypes import *
 
 # system prompt
@@ -223,6 +225,25 @@ def datapoint_to_prompt_completion_pair(
         "prompt": input_messages,
         "completion": output_message,
     }
+
+def save_augmented_dataset_to_jsonl(
+    dataset: HFDataset,
+    save_path: str,
+):
+    with open(save_path, 'w', encoding='utf-8') as f:
+        for example in dataset:
+            json.dump(example, f, ensure_ascii=False)
+            f.write('\n')
+            
+def load_augmented_dataset_from_jsonl(
+    dataset_path: str,
+) -> HFDataset:
+    # example_list = []
+    # with open(dataset_path, 'r', encoding='utf-8') as f:
+    #     for line in f:
+    #         example_list.append(json.loads(line.strip()))
+    # return HFDataset.from_list(example_list)
+    return HFDataset.from_json(dataset_path, keep_in_memory=True)
 
 def stringify_grid(grid: Grid) -> str:
     return "\n".join(" ".join(str(cell) for cell in row) for row in grid)
