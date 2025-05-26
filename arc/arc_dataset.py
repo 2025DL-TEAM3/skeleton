@@ -28,14 +28,14 @@ def build_hf_train_val_dataset(
     train_datapoints = arc_utils.sample_from_multiple_normal_tasks(
         train_tasks,
         num_samples=num_train_examples_per_normal_task + 1,
-        num_datapoints=num_datapoints_per_task,
+        num_datapoints_per_task=num_datapoints_per_task,
         replace=False,
     )
     
     val_datapoints = arc_utils.sample_from_multiple_normal_tasks(
         val_tasks,
         num_samples=num_train_examples_per_normal_task + 1,
-        num_datapoints=num_datapoints_per_task,
+        num_datapoints_per_task=num_datapoints_per_task,
         replace=False,
     )
     
