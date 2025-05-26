@@ -71,7 +71,7 @@ def main():
 
     set_seed(1234567890)
 
-    data_path = "/home/top321902/code/intro_dl/term_project/dataset"
+    data_path = "/home2/yeonjae/test/workspace/dataset"
     N_data = 100
 
     scores = []

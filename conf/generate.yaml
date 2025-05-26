@@ -1,9 +1,9 @@
 generate:
-  checkpoint_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/checkpoints/checkpoint-final
-  config_path: ${artifacts_dir}/train-aug-baseline-qwen4b-r16-custom-head/config.yaml
+  checkpoint_path: ${artifacts_dir}/test/checkpoints/checkpoint-step-9500
+  config_path: ${artifacts_dir}/test/config.yaml
   
   enable_ttt: false
-  use_data_augmentation_for_generation: true
+  use_data_augmentation_for_generation: false
   num_augmentations: 10
   batch_size_generation: 5
   grid_select_policy: naive # naive, grid-wise, cell-wise-argmax

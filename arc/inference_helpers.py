@@ -22,6 +22,7 @@ class ARCInferencer:
         self.model = model
         self.tokenizer = tokenizer
         self.generation_config = generation_config
+        self.model.generation_config = self.generation_config
         self.parse_grid_fn = parse_grid_fn
         self.device = model.device
 
@@ -88,7 +89,6 @@ class ARCInferencer:
         with torch.no_grad():
             output = self.model.generate(
                 **model_inputs,
-                generation_config=self.generation_config,
                 return_dict_in_generate=return_logits,
                 output_scores=return_logits,
             )

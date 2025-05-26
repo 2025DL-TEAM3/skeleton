@@ -69,7 +69,7 @@ class ARCSolver:
     def __init__(
         self, 
         token: str = None,
-        config_path: str = "artifacts/config.yaml",
+        config_path: str = "artifacts/qwen3_4b_rank64/config.yaml",
     ):
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
@@ -433,7 +433,7 @@ class ARCSolver:
 
     def prepare_evaluation(
         self,
-        checkpoint_path: str = "artifacts/checkpoint-final",
+        checkpoint_path: str = "artifacts/qwen3_4b_attn_ffn_lora_rank64/checkpoints/checkpoint-step-7000",
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 10,

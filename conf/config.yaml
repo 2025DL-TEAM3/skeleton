@@ -21,5 +21,5 @@ evaluation_dir: ${workspace}/evaluation
 # name of the training e.g. qwen4b-rank8
 # all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}
 # if not set, artifact_name will be `train-<timestamp>`
-artifact_name: test
+artifact_name: qwen3_4b_attn_ffn_lora_rank16
 

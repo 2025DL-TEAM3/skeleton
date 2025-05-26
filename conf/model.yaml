@@ -1,9 +1,9 @@
 model:
   model_id: Qwen/Qwen3-4B
   lora_rank: 16
-  lora_alpha: 32
+  lora_alpha: 16
   use_custom_head: true
   finetune_lm_head: true  # LM head를 직접 fine-tune할지 여부 (true면 LoRA 대신 직접 학습)
-  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "lm_head"]
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
   
   # target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
