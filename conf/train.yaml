@@ -31,4 +31,4 @@ train:
   greater_is_better: false
   load_best_model_at_end: true
 
-  dataset_num_proc: 64
+  dataset_num_proc: 16
