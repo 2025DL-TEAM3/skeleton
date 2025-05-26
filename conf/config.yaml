@@ -10,7 +10,7 @@ token: null
 
 # Define the root workspace directory
 # can be used for kubernetes
-workspace: /home2/yeonjae/test/workspace
+workspace: /home/student/workspace
 cache_dir: null
 
 # Paths based on workspace
