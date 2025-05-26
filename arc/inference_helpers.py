@@ -71,6 +71,7 @@ class ARCInferencer:
                 tokenize=False,
                 add_generation_prompt=True,
                 continue_final_message=False,
+                enable_thinking=False,
             )
             for prompt_msg in prompt_messages
         ]
@@ -230,6 +231,8 @@ class ARCInferencer:
                     grid_aug = np.array(parsed_grid)
                     grids.append(grid_aug)
                 except Exception as e:
+                    print("/// Parsing grid failed. Excluding this candidate.")
+                    print(parsed_grid)
                     continue
             if not grids:
                 print("No valid grids found. Returning random grid.")
