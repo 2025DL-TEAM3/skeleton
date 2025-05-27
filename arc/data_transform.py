@@ -67,8 +67,15 @@ def augment_and_expand(
         desc="Color augmentation"
     )
     
+    original_dataset = dataset.map(
+        DefaultFormatMessages(),
+        remove_columns=dataset.column_names,
+        num_proc=num_proc,
+        desc="Original dataset formatting"
+    )
+    
     # combine original, geometric, and color augmented datasets
-    expanded_dataset = concatenate_datasets([dataset, geometrically_augmented_dataset, color_permuted_dataset])
+    expanded_dataset = concatenate_datasets([original_dataset, geometrically_augmented_dataset, color_permuted_dataset])
     
     # shuffle the dataset
     expanded_dataset = expanded_dataset.shuffle()
