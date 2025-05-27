@@ -141,6 +141,10 @@ class InputMaskingDataCollator(DataCollatorForCompletionOnlyLM):
 
     def torch_call(self, examples):
         batch = super().torch_call(examples)  # call super, masking all inputs
+        eos_id = self.tokenizer.eos_token_id
+        eos_mask = batch["input_ids"] == eos_id
+        batch["labels"][eos_mask] = eos_id
+        
         for i in range(len(batch['labels'])):
             # 마스킹되지 않은 값(-100이 아닌 값)이 있는지 확인
             if (batch['labels'][i] != -100).any():

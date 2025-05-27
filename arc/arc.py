@@ -75,7 +75,7 @@ class ARCSolver:
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
         cache_dir = cfg.get("cache_dir", None)
-        model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B")
+        model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B-Base")
         use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
         finetune_lm_head = cfg.get("model", {}).get("finetune_lm_head", False)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
@@ -155,7 +155,6 @@ class ARCSolver:
             # Only keep necessary tokens (digits, thinking tokens, special tokens)
             keep_tok = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.:,;*+/-=')+self.tokenizer.tokenize('\n')
             apply_custom_head(self.base_model, self.tokenizer, keep_tokens = keep_tok, fmt_opts=self.fmt_opts)
-            print(self.tokenizer)
             print(f"✓ Model vocabulary optimization applied and tokenizer cache cleared")
         else:
             print("Model vocabulary optimization skipped.")
@@ -168,15 +167,14 @@ class ARCSolver:
             lora_dropout=0.1,
             target_modules=target_modules,
             bias="none",
-            use_rslora=True,
         )
         self.peft_model = None
         
         self.enable_ttt = False
         
         self.generation_config = GenerationConfig(
-            max_new_tokens=1024,
-            do_sample=True,   
+            max_new_tokens=150,
+            do_sample=False,   
         )
         self.batch_size_generation = 1
         self.grid_select_policy = "naive"
@@ -337,6 +335,7 @@ class ARCSolver:
         )
         
         if eval_dataset is not None:
+            eval_dataset = eval_dataset.select(range(100))
             eval_dataset = eval_dataset.map(
                 transform,
                 remove_columns=eval_dataset.column_names,
@@ -383,7 +382,6 @@ class ARCSolver:
                     "lr": train_args_dict.pop("lora_learning_rate", sft_training_args.learning_rate)
                 })
             if lm_head_params:
-                print("lm_head_params", len(lm_head_params))
                 optimizer_grouped_parameters.append({
                     "params": lm_head_params,
                     "lr": lm_head_lr
@@ -396,8 +394,6 @@ class ARCSolver:
                 weight_decay=0.0
             )
             trainer.optimizers = (optimizer, None)
-            print(trainer.optimizers)
-            print(trainer.model)
         # preemptively save the model before training, to check error
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
         trainer.train()
@@ -441,6 +437,7 @@ class ARCSolver:
             self.tokenizer,
             self.generation_config,
             parse_grid_fn=self.parse_grid,
+            fmt_opts=self.fmt_opts,
         )
         
         if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
@@ -455,7 +452,7 @@ class ARCSolver:
 
     def prepare_evaluation(
         self,
-        checkpoint_path: str = "artifacts/test/checkpoints/checkpoint-step-2000",
+        checkpoint_path: str = "artifacts/test/checkpoints/checkpoint-step-8500",
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 10,
