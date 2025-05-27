@@ -145,14 +145,14 @@ def sample_datapoints_from_normal_task(
 def sample_datapoints_from_normal_task_no_replacement(
     task: TaskDict,
     num_samples: int = 4,
-    num_datapoints: int = 50,
+    num_datapoints: int = 100000,
 ) -> List[DataPointDict]:
     examples = task["examples"]
     total_available = len(examples)
     max_datapoints = total_available // num_samples
     
-    # actual_datapoints = min(num_datapoints, max_datapoints)
-    actual_datapoints = max_datapoints # XXX: use all available datapoints
+    actual_datapoints = min(num_datapoints, max_datapoints)
+    # actual_datapoints = max_datapoints # XXX: use all available datapoints
     total_required = actual_datapoints * num_samples
     
     shuffled = random.sample(examples, total_required)
