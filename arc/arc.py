@@ -178,10 +178,6 @@ class ARCSolver:
             **train_args_dict,
         )
         
-        transform = data_transform.get_data_transform()
-        transform_name = transform.__class__.__name__
-        msg.info(f"Using transform: {transform_name}")  
-        
         if self.use_cached_augmented_dataset and os.path.isfile(os.path.join(self.augmented_dataset_dir, "train.jsonl")):
             # load from augmented dataset
             print(f"Loading train dataset from cached augmented dataset path: {self.augmented_dataset_dir}")
@@ -191,10 +187,8 @@ class ARCSolver:
             print(f"Loaded {len(train_dataset)} examples from cached augmented dataset.")
         else:
             print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to train dataset.")
-            train_dataset = train_dataset.map(
-                transform,
-                remove_columns=train_dataset.column_names,
-                desc=f"Applying train dataset transform ({transform_name})",
+            train_dataset = data_transform.augment_and_expand(
+                dataset=train_dataset,
                 num_proc=sft_training_args.dataset_num_proc,
             )
             arc_utils.save_augmented_dataset_to_jsonl(
@@ -212,10 +206,8 @@ class ARCSolver:
                 print(f"Loaded {len(eval_dataset)} examples from cached augmented dataset.")
             else:
                 print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to eval dataset.")
-                eval_dataset = eval_dataset.map(
-                    transform,
-                    remove_columns=eval_dataset.column_names,
-                    desc=f"Applying eval dataset transform ({transform_name})",
+                eval_dataset = data_transform.augment_and_expand(
+                    dataset=eval_dataset,
                     num_proc=sft_training_args.dataset_num_proc,
                 )
                 arc_utils.save_augmented_dataset_to_jsonl(
