@@ -237,7 +237,9 @@ class ARCSolver:
         
         # preemptively save the model before training, to check error
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
-        trainer.train()
+        trainer.train(
+            resume_from_checkpoint=train_args_dict.get("resume_from_checkpoint", None),
+        )
         # save
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
         trainer.state.save_to_json(os.path.join(self.logging_save_path, "trainer_state.json"))
