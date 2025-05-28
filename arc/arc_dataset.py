@@ -12,6 +12,7 @@ def build_hf_train_val_dataset(
     dataset_path: str,
     num_train_examples_per_normal_task: int = 3,
     num_datapoints_per_task: int = 50,
+    num_overlapping: int = 0,
     val_ratio: float = 0.1,
     seed: int = 42,
 ) -> tuple[HFDataset, HFDataset]:
@@ -29,6 +30,7 @@ def build_hf_train_val_dataset(
         train_tasks,
         num_samples=num_train_examples_per_normal_task + 1,
         num_datapoints_per_task=num_datapoints_per_task,
+        num_overlapping=num_overlapping,
         replace=False,
     )
     
@@ -36,6 +38,7 @@ def build_hf_train_val_dataset(
         val_tasks,
         num_samples=num_train_examples_per_normal_task + 1,
         num_datapoints_per_task=num_datapoints_per_task,
+        num_overlapping=num_overlapping,
         replace=False,
     )
     
@@ -55,6 +58,7 @@ def build_train_val_dataset(
     dataset_path: str | None = None,
     num_train_examples_per_task: int = 3,
     num_datapoints_per_task: int = 50,
+    num_overlapping: int = 0,
     val_ratio: float = 0.1,
     seed: int = 42,
 ) -> tuple[HFDataset, HFDataset]:
@@ -62,6 +66,7 @@ def build_train_val_dataset(
         dataset_path=dataset_path,
         num_train_examples_per_normal_task=num_train_examples_per_task,
         num_datapoints_per_task=num_datapoints_per_task,
+        num_overlapping=num_overlapping,
         val_ratio=val_ratio,
         seed=seed,
     )

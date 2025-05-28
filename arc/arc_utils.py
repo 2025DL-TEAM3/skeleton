@@ -62,23 +62,30 @@ def sample_datapoints_from_normal_task_no_replacement(
     task: TaskDict,
     num_samples: int = 4,
     num_datapoints: int = 100000,
+    num_overlapping: int = 0,
 ) -> List[DataPointDict]:
+    assert 0 <= num_overlapping < num_samples, "num_overlapping must be in [0, num_samples)"
+    
     examples = task["examples"]
     total_available = len(examples)
-    max_datapoints = total_available // num_samples
     
+    stride = num_samples - num_overlapping
+    max_datapoints = (total_available - num_samples) // stride + 1
     actual_datapoints = min(num_datapoints, max_datapoints)
-    # actual_datapoints = max_datapoints # XXX: use all available datapoints
-    total_required = actual_datapoints * num_samples
     
-    shuffled = random.sample(examples, total_required)
+    # Shuffle before sliding window
+    shuffled = random.sample(examples, total_available)
+    
     datapoints: List[DataPointDict] = []
     
     for i in range(actual_datapoints):
-        start_index = i * num_samples
+        start_index = i * stride
         end_index = start_index + num_samples
+        
+        if end_index > total_available:
+            break  # avoid index error in last window
+        
         sampled_examples = shuffled[start_index:end_index]
-
         train_examples = sampled_examples[:num_samples - 1]
         test_example = sampled_examples[num_samples - 1]
         
@@ -88,11 +95,11 @@ def sample_datapoints_from_normal_task_no_replacement(
         })
     
     return datapoints
-
 def sample_from_multiple_normal_tasks(
     tasks: List[TaskDict],
     num_samples: int = 4,
     num_datapoints_per_task: int = 50,
+    num_overlapping: int = 0,
     replace: bool = False,
 ) -> List[DataPointDict]:
     if replace:
@@ -105,7 +112,7 @@ def sample_from_multiple_normal_tasks(
         all_datapoints = []
         for task in tasks:
             sampled_datapoints = sample_datapoints_from_normal_task_no_replacement(
-                task, num_samples=num_samples, num_datapoints=num_datapoints_per_task
+                task, num_samples=num_samples, num_datapoints=num_datapoints_per_task, num_overlapping=num_overlapping
             )
             all_datapoints.extend(sampled_datapoints)
         return all_datapoints

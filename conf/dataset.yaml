@@ -1,5 +1,6 @@
 dataset:
-  num_train_examples_per_task: 8
+  num_train_examples_per_task: 7
   num_datapoints_per_task: 100000 # use all available data
+  num_overlapping: 4
   val_ratio: 0.05
   seed: 1234
