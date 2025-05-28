@@ -1,4 +1,5 @@
 import traceback, random
+import sys
 
 import numpy as np
 import torch
@@ -27,6 +28,7 @@ class ARCInferencer:
         self.parse_grid_fn = parse_grid_fn
         self.device = model.device
         self.fmt_opts = fmt_opts
+        self.allowed_tokens = self._get_allowed_tokens()
 
     def parse_grid(self, ids: List[int]) -> Grid:
         return self.parse_grid_fn(ids)
@@ -60,6 +62,201 @@ class ARCInferencer:
             reversed_grid = data_augmentation.reverse_grid_augmentation(grid, params_map)
             reversed_grids.append(reversed_grid)
         return reversed_grids
+
+    def _get_allowed_tokens(self):
+        digit_tokens = []
+        for i in range(10):
+            token = self.tokenizer.encode(str(i), add_special_tokens=False)[0]
+            digit_tokens.append(token)
+            
+        newline_token = self.tokenizer.encode("\n", add_special_tokens=False)[0]
+        
+        allowed_tokens = set(digit_tokens + [newline_token, self.tokenizer.eos_token_id])
+        return allowed_tokens
+    
+    def _explore(
+        self,
+        logits,
+        path,
+        eos,
+        max_new_tokens,
+        max_score,
+        pos,
+        cache,
+        score=0.0,
+    ):
+        first_token_logits, next_logits = logits[0], (logits[1:] if len(logits) > 1 else None)
+        
+        # 로그 확률 계산
+        softmax = list(enumerate(-first_token_logits.detach().float().log_softmax(-1).cpu()))
+        
+        # 허용된 토큰만 필터링
+        filtered_softmax = [item for item in softmax if item[0] in self.allowed_tokens]
+        
+        if len(path):
+            if path[0] in self.allowed_tokens:
+                # 해당 토큰을 맨 앞으로 이동 (있는 경우에만)
+                for i, (token_id, _) in enumerate(filtered_softmax):
+                    if token_id == path[0]:
+                        filtered_softmax[0], filtered_softmax[i], path = filtered_softmax[i], filtered_softmax[0], path[1:]
+                        break
+            else:
+                path = path[1:]
+        
+        suffixes = []
+        for i, s in filtered_softmax:
+            next_score = score + s.item()
+            if next_score < max_score:
+                if i == eos:
+                    suffixes = [([], next_score)]
+                elif max_new_tokens > 1:
+                    if next_logits is None:
+                        if cache[0] is not None:
+                            if pos < cache[0][0][0].shape[2]:
+                                cache[0] = tuple(tuple(c[:, :, :pos] for c in l) for l in cache[0])
+                            
+                            with torch.no_grad():
+                                outputs = self.model(
+                                    input_ids=torch.full((1, 1), i, device=self.model.device),
+                                    position_ids=torch.full((1, 1), pos, device=self.model.device),
+                                    past_key_values=cache[0],
+                                )
+                                next_token_logits = outputs.logits
+                                
+                                if hasattr(outputs, 'past_key_values'):
+                                    cache[0] = outputs.past_key_values
+                                else:
+                                    cache[0] = None
+                        else:
+                            with torch.no_grad():
+                                outputs = self.model(input_ids=torch.full((1, 1), i, device=self.model.device))
+                                next_token_logits = outputs.logits
+                                
+                                if hasattr(outputs, 'past_key_values'):
+                                    cache[0] = outputs.past_key_values
+                                else:
+                                    cache[0] = None
+                        
+                        next_logits = next_token_logits[0]
+                    
+                    suffixes = self._explore(
+                        logits=next_logits, 
+                        path=path, 
+                        eos=eos, 
+                        max_new_tokens=max_new_tokens-1, 
+                        max_score=max_score, 
+                        pos=pos+1, 
+                        cache=cache, 
+                        score=next_score,
+                    )
+                else:
+                    suffixes = []
+                
+                for suffix in suffixes:
+                    suffix[0].append(i)
+                suffixes.extend(suffixes)
+            
+            next_logits = None
+        
+        return suffixes
+
+    def _explore_dfs(
+        self,
+        input_ids,
+        eos_token_id,
+        max_new_tokens=100,
+        min_prob=0.0001,
+        pos=None,
+        attention_mask=None
+    ):
+        assert not torch.is_grad_enabled()
+        assert attention_mask is None or attention_mask.all(), 'not implemented'
+        
+        input_ids = torch.as_tensor(input_ids, device=self.model.device, dtype=torch.long)
+        if input_ids.ndim == 2:
+            input_ids = input_ids.squeeze(0)
+        assert input_ids.ndim == 1, 'batching not supported'
+        
+        if pos is None:
+            pos = len(input_ids)
+        elif pos < len(input_ids):
+            if input_ids[-1] == eos_token_id:
+                input_ids = input_ids[:-1]
+        
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids[torch.newaxis])
+            logits = outputs.logits[0, pos-1:]
+            
+            if hasattr(outputs, 'past_key_values'):
+                cache = outputs.past_key_values
+            else:
+                cache = None
+        
+        result = self._explore(
+            logits=logits,
+            path=input_ids[pos:].tolist(),
+            eos=eos_token_id,
+            max_new_tokens=max_new_tokens,
+            max_score=-np.log(min_prob),
+            pos=pos,
+            cache=[cache] if cache is not None else [None],
+            score=0.0,
+        )
+        
+        return sorted([(np.array(suffix[::-1]), score_val) for suffix, score_val in result], key=lambda x: x[1])
+
+    def dfs_generate(
+        self,
+        batch_datapoints: List[DataPointDict],
+        return_logits: bool = False,
+        max_new_tokens: int = 100,
+        min_prob: float = 0.001,
+    ) -> List[List[int]] | List[tuple[List[int], torch.Tensor]]:
+        sys.setrecursionlimit(1000 + max_new_tokens)
+        
+        input_start = self.fmt_opts.get("input_start", "")
+        input_end = self.fmt_opts.get("input_end", "")
+        output_end = self.fmt_opts.get("output_end", "")
+        preprompt = self.fmt_opts.get("preprompt", "")
+        
+        results = []
+        
+        for datapoint in batch_datapoints:
+            prompt_message = arc_utils.format_prompt_messages(
+                datapoint, self.tokenizer, input_start, input_end, output_end, preprompt
+            )
+            
+            model_inputs = self.tokenizer(
+                text=prompt_message,
+                add_special_tokens=False,
+                return_tensors="pt",
+            ).to(self.device)
+            
+            input_ids = model_inputs["input_ids"][0]
+            
+            dfs_results = self._explore_dfs(
+                input_ids=input_ids,
+                eos_token_id=self.tokenizer.eos_token_id,
+                max_new_tokens=max_new_tokens,
+                min_prob=min_prob
+            )
+            
+            if dfs_results:
+                best_result = dfs_results[0]
+                output_ids = best_result[0].tolist()
+                
+                if return_logits:
+                    dummy_logits = torch.zeros((len(output_ids), self.tokenizer.vocab_size), device=self.device)
+                    results.append((output_ids, dummy_logits))
+                else:
+                    results.append(output_ids)
+            else:
+                if return_logits:
+                    results.append(([], torch.zeros((0, self.tokenizer.vocab_size), device=self.device)))
+                else:
+                    results.append([])
+        
+        return results
 
     def _generate(
         self, 
@@ -253,8 +450,14 @@ class ARCInferencer:
     def predict_single(
         self,
         base_datapoint: DataPointDict,
+        use_dfs: bool = False,
     ) -> Grid:
-        output_ids = self._generate([base_datapoint], return_logits=False)[0]
+        with torch.no_grad():
+            if use_dfs:
+                output_ids = self.dfs_generate([base_datapoint], return_logits=False)[0]
+                print("dfs_generate", output_ids)
+            else:
+                output_ids = self._generate([base_datapoint], return_logits=False)[0]
         try:
             parsed_grid = self.parse_grid(output_ids)
             grid_aug = np.array(parsed_grid)
