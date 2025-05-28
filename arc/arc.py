@@ -17,11 +17,34 @@ from transformers import (
     BitsAndBytesConfig,
     PreTrainedTokenizer,
     PreTrainedModel,
+    TrainerCallback,
+    TrainerState,
+    TrainerControl,
 )
 from peft import LoraConfig, PeftModel
 
 from . import arc_utils, data_transform, data_augmentation, inference_helpers
 from .datatypes import *
+
+class SaveModelCallback(TrainerCallback):
+    def __init__(self, solver: "ARCSolver", save_steps: int = 100):
+        self.solver = solver
+        self.save_steps = save_steps
+        os.makedirs(self.solver.checkpoint_save_path, exist_ok=True)
+    
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        step = state.global_step
+        if step > 0 and step % self.save_steps == 0:
+            checkpoint_path = os.path.join(self.solver.checkpoint_save_path, f"checkpoint-step-{step}")
+            if self.solver.peft_model is not None:
+                self.solver.peft_model.save_pretrained(checkpoint_path)
+            else:
+                self.solver.base_model.save_pretrained(checkpoint_path)
+            
+            lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
+            self.solver.save_lm_head(lm_head_path)
+            print(f"✓ Saved adapter + LM Head at step {step} to {lm_head_path}")
+        return control
 
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
@@ -45,12 +68,20 @@ class ARCSolver:
         cache_dir = cfg.get("cache_dir", None)
         model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B")
         use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
+        finetune_lm_head = cfg.get("model", {}).get("finetune_lm_head", True)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
         lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
         target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
         augmented_dataset_dir = cfg.get("augmented_dataset_dir", "augmented_dataset")
         use_cached_augmented_dataset = cfg.get("use_cached_augmented_dataset", True)
         
+        # exlucde lm_head from target modules if directly finetuning it
+        if finetune_lm_head and "lm_head" in target_modules:
+            target_modules = [m for m in target_modules if m != "lm_head"]
+            print(f"✓ lm_head will be fine-tuned directly (removed from LoRA target_modules)")
+
+        self.finetune_lm_head = finetune_lm_head
+
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
 
@@ -102,12 +133,22 @@ class ARCSolver:
         ).to(self.device)
         print(f"✓ Model loaded: {self.model_id}")
 
+        self.fmt_opts = dict(
+            preprompt='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjklmnpqrstuvwxyz',
+            input_start='I',
+            input_end='\n+/-=O',
+            output_end='\n' + self.tokenizer.eos_token,
+            max_tokens=8192,
+        )
+
         # Optimize model vocabulary for ARC tasks if enabled
         if use_custom_head:
             from .custom_head import apply_custom_head
             # Only keep necessary tokens (digits, thinking tokens, special tokens)
-            apply_custom_head(self.base_model, self.tokenizer)
-            print(f"✓ Model vocabulary optimization applied")
+            # TODO: copy initial embedding values from existing one
+            keep_tok = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.:,;*+/-=')+self.tokenizer.tokenize('\n')
+            apply_custom_head(self.base_model, self.tokenizer, keep_tokens = keep_tok, fmt_opts=self.fmt_opts)
+            print(f"✓ Model vocabulary optimization applied and tokenizer cache cleared")
         else:
             print("Model vocabulary optimization skipped.")
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
@@ -127,11 +168,8 @@ class ARCSolver:
         self.enable_ttt = False
         
         self.generation_config = GenerationConfig(
-            max_new_tokens=200,
-            do_sample=True,
-            temperature=0.5,
-            top_p=0.8,
-            top_k=30,
+            max_new_tokens=150,
+            do_sample=False,   
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
@@ -141,6 +179,79 @@ class ARCSolver:
         os.makedirs(self.augmented_dataset_dir, exist_ok=True)
         self.use_cached_augmented_dataset = use_cached_augmented_dataset
         
+    def save_lm_head(self, lm_head_path: str = None):
+        model = self.base_model
+        
+        if hasattr(model, 'module'):
+            model = model.module
+        
+        lm_head_state = {}
+        for name, param in model.named_parameters():
+            if "lm_head" in name:
+                lm_head_state[name] = param.cpu().clone()
+        
+        if lm_head_state:
+            if lm_head_path is None:
+                raise ValueError("lm_head_path must be specified")
+                
+            # 디렉토리가 없는 경우 생성
+            os.makedirs(os.path.dirname(lm_head_path), exist_ok=True)
+            
+            torch.save(lm_head_state, lm_head_path)
+            print(f"✓ Saved LM head weights to {lm_head_path}")
+            return True
+        else:
+            print("No LM head weights found to save.")
+            return False
+
+    def _save_lm_head(self, checkpoint_path: str):
+        lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
+        return self.save_lm_head(lm_head_path)
+
+    def _load_from_checkpoint(self, checkpoint_path: str):
+        self.peft_model = PeftModel.from_pretrained(
+            self.base_model,
+            checkpoint_path,
+            is_trainable=self.enable_ttt
+        )
+        print(f"✓ Loaded LoRA weights from {checkpoint_path}")
+
+        lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
+        if os.path.exists(lm_head_path) and self.finetune_lm_head:
+            lm_head_state = torch.load(lm_head_path, map_location=self.device)
+            
+            base_model = self.peft_model.base_model
+            
+            missing_keys = []
+            unexpected_keys = []
+            error_msgs = []
+
+            for name, param in base_model.named_parameters():
+                if name in lm_head_state:
+                    if param.shape != lm_head_state[name].shape:
+                        error_msgs.append(f"Size mismatch for {name}: {param.shape} vs {lm_head_state[name].shape}")
+                    else:
+                        with torch.no_grad():
+                            param.copy_(lm_head_state[name].to(param.device))
+                elif "lm_head" in name:
+                    missing_keys.append(name)
+            
+            for name in lm_head_state:
+                if not any(name == param_name for param_name, _ in base_model.named_parameters()):
+                    unexpected_keys.append(name)
+            
+            if error_msgs:
+                print("\nError(s) in loading LM head weights:")
+                for msg in error_msgs:
+                    print(f"  {msg}")
+            if missing_keys:
+                print(f"Some LM head weights were not found in the checkpoint: {missing_keys}")
+            if unexpected_keys:
+                print(f"Some weights from the checkpoint were not used: {unexpected_keys}")
+                
+            print(f"✓ Loaded LM head weights from {lm_head_path}")
+        elif self.finetune_lm_head:
+            print(f"LM head weights file not found at {lm_head_path}. Using initialized weights.")
         
     def parse_grid(self, ids: List[int]) -> Grid:
         decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
@@ -151,7 +262,7 @@ class ARCSolver:
         self, 
         *,
         train_dataset: HFDataset,
-        eval_dataset: HFDataset= None,
+        eval_dataset: HFDataset = None,
         **train_args_dict,
     ):
         """
@@ -159,7 +270,10 @@ class ARCSolver:
         """
         os.makedirs(self.checkpoint_save_path, exist_ok=True)
         os.makedirs(self.logging_save_path, exist_ok=True)
+
         patience = train_args_dict.pop("patience", 5)
+        lm_head_lr = train_args_dict.pop("lm_head_learning_rate", None)
+
         callbacks = []
         if eval_dataset is not None and patience > 0:
             callbacks.append(
@@ -168,6 +282,8 @@ class ARCSolver:
                     early_stopping_threshold=0.0,
                 )
             )
+        save_steps = train_args_dict.pop("save_steps", 100)
+        callbacks.append(SaveModelCallback(self, save_steps=save_steps))
 
         sft_training_args = SFTConfig(
             output_dir=self.checkpoint_save_path,
@@ -175,7 +291,16 @@ class ARCSolver:
             log_level="debug",
             max_length=None, # avoid truncation
             label_names=["labels"], # TODO: check if needed
+            dataset_text_field="text",
             **train_args_dict,
+        )
+
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
         )
         
         if self.use_cached_augmented_dataset and os.path.isfile(os.path.join(self.augmented_dataset_dir, "train.jsonl")):
@@ -223,20 +348,64 @@ class ARCSolver:
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             args=sft_training_args,
+            data_collator=data_collator,
             peft_config=self.peft_config,
             callbacks=callbacks if callbacks else None,
         )
+
+        self.peft_model = trainer.model
+
+        if self.finetune_lm_head and lm_head_lr is not None:
+            for n, p in self.peft_model.base_model.named_parameters():
+                p.requires_grad = False
+
+            lora_params = []
+            lm_head_params = []
+            for n, p in self.peft_model.named_parameters():
+                if "lora" in n.lower():
+                    p.requires_grad = True
+                    lora_params.append(p)
+                elif "lm_head" in n:
+                    p.requires_grad = True
+                    lm_head_params.append(p)
+                else:
+                    p.requires_grad = False
+                
+            optimizer_grouped_parameters = []
+            if lora_params:
+                optimizer_grouped_parameters.append({
+                    "params": lora_params,
+                    "lr": train_args_dict.pop("lora_learning_rate", sft_training_args.learning_rate)
+                })
+            if lm_head_params:
+                optimizer_grouped_parameters.append({
+                    "params": lm_head_params,
+                    "lr": lm_head_lr
+                })
+
+            optimizer = torch.optim.AdamW(
+                optimizer_grouped_parameters,
+                betas=(0.9, 0.999),
+                eps=1e-8,
+                weight_decay=0.0
+            )
+            trainer.optimizer = optimizer
         
         # preemptively save the model before training, to check error
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
         trainer.train(
             resume_from_checkpoint=train_args_dict.get("resume_from_checkpoint", None),
         )
+        
         # save
-        trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-final"))
+        final_checkpoint_path = os.path.join(self.checkpoint_save_path, "checkpoint-final")
+        trainer.save_model(final_checkpoint_path)
         trainer.state.save_to_json(os.path.join(self.logging_save_path, "trainer_state.json"))
         with open(os.path.join(self.logging_save_path, "log_history.json"), "w") as f:
             json.dump(trainer.state.log_history, f, indent=4)
+        if self.finetune_lm_head:
+            self._save_lm_head(final_checkpoint_path)
+
         end_time = time.time()
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
@@ -267,6 +436,7 @@ class ARCSolver:
             self.tokenizer,
             self.generation_config,
             parse_grid_fn=self.parse_grid,
+            fmt_opts=self.fmt_opts,
         )
         
         if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
@@ -306,12 +476,8 @@ class ARCSolver:
         print(generation_config_msg)
         
         try:
-            # Note: checkpoint config should be match with the model config used in intialization
-            self.peft_model = PeftModel.from_pretrained(
-                self.base_model,
-                checkpoint_path, 
-                is_trainable=enable_ttt,
-            )
+            self._load_from_checkpoint(checkpoint_path)
+
             print("------------------ LoRA adapter loaded -----------------")
             print(f"Model ID: {self.model_id}")
             for adapter_name, config in self.peft_model.peft_config.items():
