@@ -1,5 +1,6 @@
 import os
 import json
+from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,20 +15,36 @@ from transformers import (
     PreTrainedModel,
 )
 
-def get_or_map_special_tokens(data, mapping=None):
+def indices_required_for_merges(keep_indices, vocab, merges):
+    merges_lookup = {}
+    for m in merges:
+        a, b = m.split(' ') if isinstance(m, str) else m
+        key = vocab[f'{a}{b}']
+        if key not in merges_lookup: merges_lookup[key] = set()
+        merges_lookup[key].add(vocab[a])
+        merges_lookup[key].add(vocab[b])
+    to_process = list(keep_indices)
+    while len(to_process):
+        for w in merges_lookup.get(to_process.pop(), []):
+            if w not in keep_indices:
+                keep_indices[w] = None
+                to_process.append(w)
+    return keep_indices
+
+def remove_unused_merges(merges, vocab):
+    return [f'{a} {b}' for a, b in [m.split(' ') if isinstance(m, str) else m for m in merges] if all(w in vocab for w in [a, b, a + b])]
+
+def map_special_tokens(data, mapping=None):
     tokens = set()
     if isinstance(data, dict):
         special = data.get('special_tokens')
-        if special is not None:  # find and/or update special token mappings
+        if special is not None:
             for v in special.values():
                 tokens.update(v['ids'])
                 if mapping is not None:
                     v['ids'] = [mapping.get(i) for i in v['ids'] if i in mapping]
-        for v in data.values():  # recursively process dict values
-            tokens.update(get_or_map_special_tokens(v, mapping))
-    if isinstance(data, list):
-        for v in data:  # recursively process lists
-            tokens.update(get_or_map_special_tokens(v, mapping))
+    for v in (data.values() if isinstance(data, dict) else data if isinstance(data, list) else []):
+        tokens.update(map_special_tokens(v, mapping))
     return tokens
 
 
@@ -41,37 +58,37 @@ def remove_tokenizer_normalizer(tokenizer):
 
 def shrink_tokenizer_vocab(
     tokenizer: PreTrainedTokenizer, 
-    keep_token_ids: Set[int], 
+    keep_indices: OrderedDict[int, None], 
     keep_special=True, 
-    remove_unk=False
+    keep_token_order=False
 ):
     assert tokenizer.is_fast
     tok_json = json.loads(tokenizer._tokenizer.to_str())
     assert tok_json['model']['type'] == "BPE"
 
     if keep_special:  # get special tokens to keep
-        keep_token_ids.update(tokenizer.all_special_ids)
-        keep_token_ids.update(get_or_map_special_tokens(tok_json.get('post_processor')))
-
-    if remove_unk:  # remove unknown token
-        keep_token_ids -= {tokenizer.unk_token_id}
+        keep_indices.update({k: None for k in tokenizer.all_special_ids})
+        keep_indices.update({k: None for k in map_special_tokens(tok_json.get('post_processor'))})
+        
+    keep_indices = indices_required_for_merges(keep_indices, tok_json['model']['vocab'], tok_json['model']['merges'])
+    
+    if keep_token_order: 
+        keep_indices = sorted(keep_indices)
 
     # build mapping from old to new id
-    mapping = {old: new for new, old in enumerate(sorted(keep_token_ids))}
+    mapping = {old: new for new, old in enumerate(keep_indices)}
 
     # update tokenizer info
     tok_json['model']['vocab'] = {k: mapping[v] for k, v in tok_json['model']['vocab'].items() if v in mapping}
-    tok_json['model']['merges'] = []
-    tok_json['added_tokens'] = [{**t, 'id': mapping[t['id']]} for t in tok_json['added_tokens'] if t['id'] in mapping]
-    tok_json['added_tokens'] = sorted(tok_json['added_tokens'], key=lambda t: t['id'])
-    get_or_map_special_tokens(tok_json.get('post_processor'), mapping)
-
-    tokenizer._tokenizer = Tokenizer.from_str(json.dumps(tok_json))  # reload json, modifying tokenizer in-place
-
-    if remove_unk:
-        tokenizer.unk_token = None
-
-    return mapping  # token mapping to be used later
+    tok_json['model']['merges'] = remove_unused_merges(tok_json['model']['merges'], tok_json['model']['vocab'])
+    
+    special_tokens_order = [t['id'] for t in tok_json['added_tokens']]
+    assert special_tokens_order==sorted(special_tokens_order)
+    
+    tok_json['added_tokens'] = sorted([{**t, 'id': mapping[t['id']]} for t in tok_json['added_tokens'] if t['id'] in mapping], key=lambda t: t['id'])
+    map_special_tokens(tok_json.get('post_processor'), mapping)
+    tokenizer._tokenizer = Tokenizer.from_str(json.dumps(tok_json))
+    return mapping, keep_indices
 
 
 def shrink_model_embeddings(
@@ -105,58 +122,22 @@ def shrink_model_embeddings(
 
 def apply_custom_head(
     model: PreTrainedModel, 
-    tokenizer: PreTrainedTokenizer,
+    tokenizer: PreTrainedTokenizer, 
+    keep_token_ids: List = [], 
+    keep_tokens: List = [], 
+    remove_token_ids: List = [], 
+    keep_model_tokens: bool = True, 
+    keep_special_tokens: bool = True, 
+    keep_normalizer: bool = False, 
+    keep_token_order: bool= True,
+    fmt_opts: dict = None,
 ):
-    """
-    1. prepare allowed token strings
-    2. convert to token ids
-    3. shrink tokenizer vocab
-    """
-    
-    keep_token_ids = set()
-    
-    # digits
-    for i in range(10):
-        token_id = tokenizer.encode(str(i), add_special_tokens=False)[0]
-        keep_token_ids.add(token_id)
-    
-    # Add thinking tokens
-    try:
-        think_start_id = tokenizer.encode("<think>", add_special_tokens=False)[0]
-        think_end_id = tokenizer.encode("</think>", add_special_tokens=False)[0]
-        keep_token_ids.add(think_start_id)
-        keep_token_ids.add(think_end_id)
-    except Exception as e:
-        warnings.warn(f"Could not add thinking tokens: {e}")
-    
-    # Add newline token for ARC grid formatting
-    try:
-        newline_id = tokenizer.encode("\n", add_special_tokens=False)[0]
-        keep_token_ids.add(newline_id)
-    except Exception as e:
-        warnings.warn(f"Could not add newline token: {e}")
-
-    # Add space token for ARC grid formatting
-    try:
-        space_id = tokenizer.encode(" ", add_special_tokens=False)[0]
-        keep_token_ids.add(space_id)
-    except Exception as e:
-        warnings.warn(f"Could not add space token: {e}")
-    
-    # Find other useful tokens for ARC
-    try:
-        tokens_to_check = ["[", "]", "{", "}", "(", ")", ":", ",", "."]
-        for token in tokens_to_check:
-            try:
-                ids = tokenizer.encode(token, add_special_tokens=False)
-                for token_id in ids:
-                    keep_token_ids.add(token_id)
-            except:
-                pass
-    except Exception as e:
-        warnings.warn(f"Could not add utility tokens: {e}")
-        
-    # Add all tokens from the prompt templates
+    if not keep_normalizer: 
+        remove_tokenizer_normalizer(tokenizer)
+    from collections import OrderedDict  # use as OrderedSet
+    keep_indices = OrderedDict()
+    keep_indices.update({k: None for k in keep_token_ids})
+    keep_indices.update({tokenizer.vocab[t]: None for t in keep_tokens})
     try:
         # Import here to avoid circular import
         from .arc_utils import format_prompt_messages
@@ -172,37 +153,24 @@ def apply_custom_head(
             "test": [
                 {
                     "input": [[9, 8], [7, 6]],
-                    "output": None,
+                    "output": [[9, 8], [7, 6]],
                 },
             ],
         }
         
-        fomatted_point = format_prompt_messages(datapoint=sample_datapoint)
-        
-        prompt_chat_template_applied = tokenizer.apply_chat_template(
-            fomatted_point, 
-            tokenize=False,
-            add_generation_prompt=True,
-            continue_final_message=False,        
-        )
-        
-        # Tokenize the sample prompt and add all token IDs to keep_tokens
-        prompt_token_ids = tokenizer.encode(prompt_chat_template_applied, add_special_tokens=False)
-        for token_id in prompt_token_ids:
-            keep_token_ids.add(token_id)
-            
-        print(f"Added {len(prompt_token_ids)} tokens from prompt templates")
+        formatted_point = format_prompt_messages(datapoint=sample_datapoint, tokenizer=tokenizer, input_start = fmt_opts["input_start"], input_end = fmt_opts["input_end"], output_end = fmt_opts["output_end"], preprompt = fmt_opts["preprompt"])
+        tokens = tokenizer(formatted_point)['input_ids']
+        keep_indices.update({k: None for k in tokens})
     except Exception as e:
-        warnings.warn(f"Error adding prompt template tokens: {e}")
-    
-    # keep tokens used by model
-    for config in [model.config, model.generation_config]:
-        for k, v in config.to_dict().items():
-            if k.endswith('token_id'):
-                keep_token_ids.update(v if isinstance(v, list) else [v])
-    keep_token_ids -= {None}
-    mapping = shrink_tokenizer_vocab(tokenizer, keep_token_ids, keep_special=True, remove_unk=True)
-    shrink_model_embeddings(model, mapping)
-    
-    print(f"✓ Model vocabulary optimized for ARC: {len(mapping)} tokens kept")
-    return model, tokenizer, mapping
+        print(f"Failed to apply custom head: {e}")
+    if keep_model_tokens:
+        for config in [model.config, model.generation_config]:
+            for k, v in config.to_dict().items():
+                if k.endswith('token_id'):
+                    keep_indices.update({k: None for k in (v if isinstance(v, list) else [v])})
+    keep_indices.pop(None, None)
+    for idx in remove_token_ids: 
+        keep_indices.pop(idx, None)
+    mapping, keep_indices = shrink_tokenizer_vocab(tokenizer, keep_indices, keep_special_tokens, keep_token_order)
+    shrink_model_embeddings(model, keep_indices, mapping=mapping)
+    return mapping

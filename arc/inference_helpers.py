@@ -18,6 +18,7 @@ class ARCInferencer:
         tokenizer: PreTrainedTokenizer,
         generation_config: GenerationConfig,
         parse_grid_fn: Callable[[List[int]], Grid],
+        fmt_opts: dict,
     ):
         self.model = model
         self.tokenizer = tokenizer
@@ -25,6 +26,7 @@ class ARCInferencer:
         self.model.generation_config = generation_config
         self.parse_grid_fn = parse_grid_fn
         self.device = model.device
+        self.fmt_opts = fmt_opts
 
     def parse_grid(self, ids: List[int]) -> Grid:
         return self.parse_grid_fn(ids)
@@ -64,27 +66,21 @@ class ARCInferencer:
         batch_datapoints: List[DataPointDict], 
         return_logits: bool = False
     ) -> List[List[int]] | List[tuple[List[int], torch.Tensor]]:
-        prompt_messages = [arc_utils.format_prompt_messages(dp) for dp in batch_datapoints]
-        prompt_strs: List[str] = [
-            self.tokenizer.apply_chat_template(
-                prompt_msg,
-                tokenize=False,
-                add_generation_prompt=True,
-                continue_final_message=False,
-                enable_thinking=False,
-            )
-            for prompt_msg in prompt_messages
-        ]
-        
+        input_start = self.fmt_opts.get("input_start", "")
+        input_end = self.fmt_opts.get("input_end", "")
+        output_end = self.fmt_opts.get("output_end", "")
+        preprompt = self.fmt_opts.get("preprompt", "")
+        prompt_messages = [arc_utils.format_prompt_messages(dp, self.tokenizer, input_start, input_end, output_end, preprompt) for dp in batch_datapoints]
+
         model_inputs = self.tokenizer(
-            text=prompt_strs,
+            text=prompt_messages,
             add_special_tokens=False,
             return_tensors="pt",
             padding=True,
             truncation=True, 
         ).to(self.device)
 
-        prompt_lens = model_inputs["input_ids"].ne(self.tokenizer.pad_token_id).long().sum(dim=1)
+        prompt_lens = [len(ids) for ids in model_inputs["input_ids"]]
 
         with torch.no_grad():
             output = self.model.generate(

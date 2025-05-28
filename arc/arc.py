@@ -25,6 +25,7 @@ from peft import LoraConfig, PeftModel
 
 from . import arc_utils, data_transform, data_augmentation, inference_helpers
 from .datatypes import *
+from .arc_utils import InputMaskingDataCollator
 
 class SaveModelCallback(TrainerCallback):
     def __init__(self, solver: "ARCSolver", save_steps: int = 100):

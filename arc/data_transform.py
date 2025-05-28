@@ -1,6 +1,7 @@
 import random
 from abc import ABC, abstractmethod
 from datasets import Dataset as HFDataset, concatenate_datasets
+from transformers import PreTrainedTokenizer
 
 from . import arc_utils
 from .datatypes import *
@@ -15,29 +16,46 @@ class DataTransform(ABC):
         return self.transform(datapoint)
 
 class DefaultFormatMessages(DataTransform):
+    def __init__(self, tokenizer: PreTrainedTokenizer, fmt_opts: dict):
+        self.tokenizer = tokenizer
+    
     def transform(self, datapoint: DataPointDict) -> PromptCompletionPair:
-        return arc_utils.datapoint_to_prompt_completion_pair(datapoint)
+        input_start = self.fmt_opts.get("input_start", "")
+        input_end = self.fmt_opts.get("input_end", "")
+        output_end = self.fmt_opts.get("output_end", "")
+        preprompt = self.fmt_opts.get("preprompt", "")
+        return arc_utils.datapoint_to_prompt_completion_pair(datapoint, tokenizer=self.tokenizer, input_start=input_start, input_end=input_end, output_end=output_end, preprompt=preprompt)
     
 
 class RandomAugmentationTransform(DataTransform):
     def __init__(
         self, 
+        tokenizer: PreTrainedTokenizer, 
+        fmt_opts: dict, 
         augmentation_names: Optional[list[str]] = None,
         swap_train_and_test: bool = True, 
-        apply_task_augmentation_probability: float = 0.5
+        apply_task_augmentation_probability: float = 0.5,
     ):
-        self.augmentation_names = augmentation_names
+        self.tokenizer = tokenizer
         self.swap_train_and_test = swap_train_and_test
         self.apply_task_augmentation_probability = apply_task_augmentation_probability
+        self.fmt_opts = fmt_opts
+        self.augmentation_names = augmentation_names
 
     def transform(self, datapoint: DataPointDict) -> PromptCompletionPair:
         augmented_datapoint, _ = random_datapoint_augmentation(datapoint, self.swap_train_and_test, self.augmentation_names)
         # if random.random() < self.apply_task_augmentation_probability: # Note: padd/upscale does not help training
         #     augmented_datapoint = random_task_augmentation(augmented_datapoint)
-        return arc_utils.datapoint_to_prompt_completion_pair(augmented_datapoint)
+        input_start = self.fmt_opts.get("input_start", "")
+        input_end = self.fmt_opts.get("input_end", "")
+        output_end = self.fmt_opts.get("output_end", "")
+        preprompt = self.fmt_opts.get("preprompt", "")
+        return arc_utils.datapoint_to_prompt_completion_pair(augmented_datapoint, tokenizer=self.tokenizer, input_start=input_start, input_end=input_end, output_end=output_end, preprompt=preprompt)
 
 def augment_and_expand(
     dataset: HFDataset,
+    tokenizer: PreTrainedTokenizer,
+    fmt_opts: dict,
     augmentation_names: Optional[list[str]] = None,
     swap_train_and_test: bool = True,
     num_proc: int = 4
@@ -48,6 +66,8 @@ def augment_and_expand(
     # geometric augmentation
     geometrically_augmented_dataset = dataset.map(
         RandomAugmentationTransform(
+            tokenizer=tokenizer,
+            fmt_opts=fmt_opts,
             augmentation_names=["geometric"],
             swap_train_and_test=swap_train_and_test
         ),
@@ -59,6 +79,8 @@ def augment_and_expand(
     # color augmentation
     color_permuted_dataset = dataset.map(
         RandomAugmentationTransform(
+            tokenizer=tokenizer,
+            fmt_opts=fmt_opts,
             augmentation_names=["color"],
             swap_train_and_test=swap_train_and_test
         ),
@@ -68,7 +90,10 @@ def augment_and_expand(
     )
     
     original_dataset = dataset.map(
-        DefaultFormatMessages(),
+        DefaultFormatMessages(
+            tokenizer=tokenizer,
+            fmt_opts=fmt_opts
+        ),
         remove_columns=dataset.column_names,
         num_proc=num_proc,
         desc="Original dataset formatting"

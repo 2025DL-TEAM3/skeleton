@@ -14,10 +14,7 @@ class TestExampleDict(TypedDict):
 class DataPointDict(TypedDict):
     train: List[ExampleDict]
     test: List[ExampleDict]
-    
-class ReasoningDataPointDict(DataPointDict):
-    reasoning: List[str]
-    
+
 class FormattedPrompt(TypedDict):
     input_ids: torch.Tensor
     input: Grid
@@ -27,10 +24,6 @@ class TaskDict(TypedDict):
     file_path: str
     task_id: str
     examples: List[ExampleDict]
-
-class ReasoningTaskDict(TypedDict):
-    task_id: str
-    datapoints: List[ReasoningDataPointDict]
 
 class ChatEntry(TypedDict):
     role: Literal["user", "assistant"]
