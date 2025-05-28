@@ -93,6 +93,7 @@ def shrink_tokenizer_vocab(
 
 def shrink_model_embeddings(
     model: PreTrainedModel,
+    keep_indices: OrderedDict[int, None],
     mapping: Dict[int, int] # key: old token id, value: new token id
 ):
     with torch.no_grad():
@@ -101,24 +102,17 @@ def shrink_model_embeddings(
         print(f"✓ Model output embeddings weight copied from input embeddings")
         
         # copy embeddings to keep
-        old_token_row_indices = torch.tensor([x[0] for x in sorted(mapping.items(), key=lambda x: x[1])])
-        old_token_row_indices = old_token_row_indices.to(model.get_input_embeddings().weight.data.device)
-        selected_rows_input = torch.index_select(model.get_input_embeddings().weight.data, 0, old_token_row_indices)
-        old_token_row_indices = old_token_row_indices.to(model.get_output_embeddings().weight.data.device)
-        selected_row_output = torch.index_select(model.get_output_embeddings().weight.data, 0, old_token_row_indices)
-
-        # resize model embeddings
-        model.resize_token_embeddings(len(old_token_row_indices))
-
-        # set to copied values
-        model.get_input_embeddings().weight.data[:] = selected_rows_input
-        model.get_output_embeddings().weight.data[:] = selected_row_output
-
-        # map model tokens to new id
+        row_select = torch.tensor(list(keep_indices))
+        new_embed_t = torch.index_select(model.get_input_embeddings().weight.data, 0, row_select.to(model.get_input_embeddings().weight.data.device))
+        new_lm_head = torch.index_select(model.get_output_embeddings().weight.data, 0, row_select.to(model.get_output_embeddings().weight.data.device))
+        model.resize_token_embeddings(len(keep_indices))
+        model.get_input_embeddings().weight.data[:] = new_embed_t
+        model.get_output_embeddings().weight.data[:] = new_lm_head
         for config in [model.config, model.generation_config]:
             for k, v in list(config.to_dict().items()):
                 if k.endswith('token_id'):
                     setattr(config, k, [mapping.get(t) for t in v] if isinstance(v, list) else mapping.get(v))
+
 
 def apply_custom_head(
     model: PreTrainedModel, 
