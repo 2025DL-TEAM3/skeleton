@@ -150,6 +150,7 @@ class ARCSolver:
             keep_tok = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!?.:,;*+/-=')+self.tokenizer.tokenize('\n')
             apply_custom_head(self.base_model, self.tokenizer, keep_tokens = keep_tok, fmt_opts=self.fmt_opts)
             print(f"✓ Model vocabulary optimization applied and tokenizer cache cleared")
+            print(f"Model vocabulary size: {self.base_model.vocab_size}")
         else:
             print("Model vocabulary optimization skipped.")
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
@@ -283,7 +284,7 @@ class ARCSolver:
                     early_stopping_threshold=0.0,
                 )
             )
-        save_steps = train_args_dict.pop("save_steps", 100)
+        save_steps = train_args_dict.get("save_steps", 100)
         callbacks.append(SaveModelCallback(self, save_steps=save_steps))
 
         sft_training_args = SFTConfig(
@@ -315,6 +316,8 @@ class ARCSolver:
             print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to train dataset.")
             train_dataset = data_transform.augment_and_expand(
                 dataset=train_dataset,
+                tokenizer=self.tokenizer,
+                fmt_opts=self.fmt_opts,
                 num_proc=sft_training_args.dataset_num_proc,
             )
             arc_utils.save_augmented_dataset_to_jsonl(
@@ -334,6 +337,8 @@ class ARCSolver:
                 print("Using cached augmented dataset is disabled or no cached dataset found, applying transform to eval dataset.")
                 eval_dataset = data_transform.augment_and_expand(
                     dataset=eval_dataset,
+                    tokenizer=self.tokenizer,
+                    fmt_opts=self.fmt_opts,
                     num_proc=sft_training_args.dataset_num_proc,
                 )
                 arc_utils.save_augmented_dataset_to_jsonl(

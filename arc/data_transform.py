@@ -18,6 +18,7 @@ class DataTransform(ABC):
 class DefaultFormatMessages(DataTransform):
     def __init__(self, tokenizer: PreTrainedTokenizer, fmt_opts: dict):
         self.tokenizer = tokenizer
+        self.fmt_opts = fmt_opts
     
     def transform(self, datapoint: DataPointDict) -> PromptCompletionPair:
         input_start = self.fmt_opts.get("input_start", "")

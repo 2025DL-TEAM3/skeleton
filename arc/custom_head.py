@@ -167,4 +167,5 @@ def apply_custom_head(
         keep_indices.pop(idx, None)
     mapping, keep_indices = shrink_tokenizer_vocab(tokenizer, keep_indices, keep_special_tokens, keep_token_order)
     shrink_model_embeddings(model, keep_indices, mapping=mapping)
+    print(f"✓ Model vocabulary optimized for ARC: {len(mapping)} tokens kept")
     return mapping

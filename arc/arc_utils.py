@@ -177,7 +177,7 @@ def format_prompt_messages(
     output_end: str,
     preprompt: str = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjklmnpqrstuvwxyz",
 ) -> list[ChatEntry]:
-    example_blocks = preprompt
+    examples_block = preprompt
     for i, ex in enumerate(datapoint["train"], start=1):
         in_txt  = stringify_grid_input(ex["input"], start = input_start, end = input_end)
         out_txt = stringify_grid_output(ex["output"], end = output_end)
