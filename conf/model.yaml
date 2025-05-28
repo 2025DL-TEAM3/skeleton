@@ -6,5 +6,5 @@ model:
   finetune_lm_head: true
   # target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head", "embed_tokens"]
   # target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "lm_head"]
-  target_modules:: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
+  target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"]
   # target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
