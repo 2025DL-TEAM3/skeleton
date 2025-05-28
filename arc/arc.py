@@ -459,7 +459,7 @@ class ARCSolver:
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 5,
         batch_size_generation: int = 5,
-        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "grid-wise",
+        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "voted-gridwise"] = "voted-gridwise",
         **kwargs,
     ):
         """
