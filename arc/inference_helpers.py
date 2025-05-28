@@ -65,31 +65,12 @@ class ARCInferencer:
         self, 
         batch_datapoints: List[DataPointDict], 
         return_logits: bool = False,
-        use_static_shape: bool = False,
     ) -> List[List[int]] | List[tuple[List[int], torch.Tensor]]:
         input_start = self.fmt_opts.get("input_start", "")
         input_end = self.fmt_opts.get("input_end", "")
         output_end = self.fmt_opts.get("output_end", "")
         preprompt = self.fmt_opts.get("preprompt", "")
         prompt_messages = [arc_utils.format_prompt_messages(dp, self.tokenizer, input_start, input_end, output_end, preprompt) for dp in batch_datapoints]
-        # prompt_strs = [
-        #     self.tokenizer.apply_chat_template(
-        #         prompt_msg,
-        #         tokenize=False,
-        #         add_generation_prompt=True,
-        #         continue_final_message=False,
-        #         enable_thinking=False,
-        #     )
-        #     for prompt_msg in prompt_messages
-        # ]
-        
-        # model_inputs = self.tokenizer(
-        #     text=prompt_strs,
-        #     add_special_tokens=False,
-        #     return_tensors="pt",
-        #     padding=True,
-        #     truncation=True, 
-        # ).to(self.device)
 
         model_inputs = self.tokenizer(
             text=prompt_messages,
@@ -105,16 +86,6 @@ class ARCInferencer:
                 return_dict_in_generate=return_logits,
                 output_scores=return_logits,
             )
-        
-        seq = [output[i][prompt_lens[i]:].cpu().tolist() for i in range(len(output))]
-
-        if use_static_shape:
-            size_list = [self._infer_test_shape(dp) for dp in batch_datapoints]
-            for i in range(len(seq)):
-                x,y=size_list[i]
-                seq[i]=seq[i][:x*(y+1)]
-            return seq
-        
         
         if not return_logits:
             # output: (batch_size, total_seq_len)
@@ -283,7 +254,7 @@ class ARCInferencer:
         self,
         base_datapoint: DataPointDict,
     ) -> Grid:
-        output_ids = self._generate([base_datapoint], return_logits=False, use_static_shape=False)[0]
+        output_ids = self._generate([base_datapoint], return_logits=False)[0]
         try:
             parsed_grid = self.parse_grid(output_ids)
             grid_aug = np.array(parsed_grid)

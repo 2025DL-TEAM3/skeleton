@@ -70,17 +70,17 @@ class ARCSolver:
     def __init__(
         self, 
         token: str = None,
-        config_path: str = "artifacts/test/config.yaml",
+        config_path: str = "artifacts/config.yaml",
     ):
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
         cache_dir = cfg.get("cache_dir", None)
         model_id = cfg.get("model", {}).get("model_id", "Qwen/Qwen3-4B-Base")
-        use_custom_head = cfg.get("model", {}).get("use_custom_head", False)
-        finetune_lm_head = cfg.get("model", {}).get("finetune_lm_head", False)
+        use_custom_head = cfg.get("model", {}).get("use_custom_head", True)
+        finetune_lm_head = cfg.get("model", {}).get("finetune_lm_head", True)
         lora_rank = cfg.get("model", {}).get("lora_rank", 16)
-        lora_alpha = cfg.get("model", {}).get("lora_alpha", 32)
-        target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj"])
+        lora_alpha = cfg.get("model", {}).get("lora_alpha", 16)
+        target_modules = cfg.get("model", {}).get("target_modules", ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "lm_head"])
         
         # LM head를 직접 fine-tune하는 경우 LoRA 타겟 모듈에서 제외
         if finetune_lm_head and "lm_head" in target_modules:
@@ -175,6 +175,8 @@ class ARCSolver:
         self.generation_config = GenerationConfig(
             max_new_tokens=150,
             do_sample=False,   
+            eos_token_id=self.tokenizer.eos_token_id,
+            pad_token_id=self.tokenizer.pad_token_id,
         )
         self.batch_size_generation = 1
         self.grid_select_policy = "naive"
@@ -452,9 +454,9 @@ class ARCSolver:
 
     def prepare_evaluation(
         self,
-        checkpoint_path: str = "artifacts/test/checkpoints/checkpoint-step-8500",
+        checkpoint_path: str = "artifacts/checkpoint-final",
         enable_ttt: bool = False,
-        use_data_augmentation_for_generation: bool = True,
+        use_data_augmentation_for_generation: bool = False,
         num_augmentations: int = 10,
         batch_size_generation: int = 5,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
