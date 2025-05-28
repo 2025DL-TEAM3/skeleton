@@ -71,7 +71,7 @@ def main():
 
     set_seed(1234567890)
 
-    data_path = "/home2/yeonjae/test/workspace/dataset"
+    data_path = "/home/student/workspace/dataset"
     N_data = 100
 
     scores = []
@@ -86,6 +86,8 @@ def main():
         )
         s = check_match(preds, eval_data["test"][0]["output"])
         scores.append(s)
+        print("scores:", scores, flush=True)
+        print("Current score:", sum(scores), flush=True)
     
     score = np.array(scores).mean() * 100
     print(f"Evaluation scores: {score:.2f}", flush=True)

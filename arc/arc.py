@@ -456,10 +456,10 @@ class ARCSolver:
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
         enable_ttt: bool = False,
-        use_data_augmentation_for_generation: bool = False,
-        num_augmentations: int = 10,
+        use_data_augmentation_for_generation: bool = True,
+        num_augmentations: int = 5,
         batch_size_generation: int = 5,
-        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
+        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "grid-wise",
         **kwargs,
     ):
         """

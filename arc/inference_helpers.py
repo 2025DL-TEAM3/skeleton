@@ -66,18 +66,25 @@ class ARCInferencer:
         batch_datapoints: List[DataPointDict], 
         return_logits: bool = False,
     ) -> List[List[int]] | List[tuple[List[int], torch.Tensor]]:
+        # import time
+        # now = time.time()
         input_start = self.fmt_opts.get("input_start", "")
         input_end = self.fmt_opts.get("input_end", "")
         output_end = self.fmt_opts.get("output_end", "")
         preprompt = self.fmt_opts.get("preprompt", "")
         prompt_messages = [arc_utils.format_prompt_messages(dp, self.tokenizer, input_start, input_end, output_end, preprompt) for dp in batch_datapoints]
-
+        # print(f"Prompt formatting took {time.time() - now:.2f} seconds")
+        # now = time.time()
         model_inputs = self.tokenizer(
             text=prompt_messages,
             add_special_tokens=False,
             return_tensors="pt",
+            padding=True,
+            truncation=True,
+            padding_side="left",
         ).to(self.device)
-
+        # print(f"Tokenization took {time.time() - now:.2f} seconds")
+        # now = time.time()
         prompt_lens = [len(ids) for ids in model_inputs["input_ids"]]
 
         with torch.no_grad():
@@ -86,7 +93,8 @@ class ARCInferencer:
                 return_dict_in_generate=return_logits,
                 output_scores=return_logits,
             )
-        
+        # print(f"Generation took {time.time() - now:.2f} seconds")
+        # now = time.time()
         if not return_logits:
             # output: (batch_size, total_seq_len)
             return [
