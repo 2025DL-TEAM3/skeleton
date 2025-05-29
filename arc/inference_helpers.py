@@ -78,6 +78,7 @@ class ARCInferencer:
             return_tensors="pt",
             padding=True,
             truncation=True, 
+            padding_side="left",
         ).to(self.device)
 
         prompt_lens = [len(ids) for ids in model_inputs["input_ids"]]
@@ -125,6 +126,51 @@ class ARCInferencer:
     
         best = max(grid_counts, key=grid_counts.get)
         return best
+    
+    def _vote_select_with_log_probs(
+        self,
+        candidates: List[tuple[List[int], torch.Tensor]],
+        params_maps: List[dict],
+    ) -> Grid:
+        grid_info = {} # { (grid_tuple): (count, log_prob_sum, grid)}
+        
+        for (ids, logits), params_map in zip(candidates, params_maps):
+            log_probs = F.log_softmax(logits, dim=-1) # (gen_len, vocab_size)
+            token_ids = torch.tensor(ids).unsqueeze(-1) # (gen_len, 1)
+            token_log_probs = log_probs.gather(1, token_ids).squeeze(-1)  # (gen_len,)
+            score = token_log_probs.sum().item()
+            
+            try:
+                parsed_grid = self.parse_grid(ids)
+                grid_aug = np.array(parsed_grid)
+            except Exception as e:
+                print("Grid parsing failed. Excluding this candidate.")
+                continue
+            
+            grid_orig = data_augmentation.reverse_grid_augmentation(grid_aug, params_map)
+            grid_tuple = tuple(map(tuple, grid_orig))
+            
+            if grid_tuple in grid_info:
+                count, best_score, _ = grid_info[grid_tuple]
+                grid_info[grid_tuple] = (count + 1, max(best_score, score), grid_orig)
+            else:
+                grid_info[grid_tuple] = (1, score, grid_orig)
+        
+        if not grid_info:
+            print("No valid grids found. Returning random grid.")
+            x, y = self._infer_test_shape(candidates[0][0])
+            return np.random.randint(0, 10, (x, y))
+        
+        max_votes = max(count for count, _, _ in grid_info.values())
+        top_candidates = [(count, score, grid) for grid_tuple, (count, score, grid) in grid_info.items() if count == max_votes]
+        
+        if len(top_candidates) == 1:
+            # if there's a single top candidate, return it
+            return top_candidates[0][2]
+        else:
+            # if there are multiple candidates with the same max votes, select the one with the highest score
+            _, best_score, best_grid = max(top_candidates, key=lambda x: x[1])
+            return best_grid
     
     def _grid_wise_select(
         self,
@@ -242,6 +288,8 @@ class ARCInferencer:
                 selected_grid = self._grid_wise_select(candidate_ids_logits, params_maps)
             elif grid_select_policy == "cell-wise-argmax":
                 selected_grid = self._cell_wise_argmax_select(candidate_ids_logits, params_maps)
+            elif grid_select_policy == "voted-gridwise":
+                selected_grid = self._vote_select_with_log_probs(candidate_ids_logits, params_maps)
             else:
                 raise ValueError(f"Unknown grid select policy: {grid_select_policy}")
         
