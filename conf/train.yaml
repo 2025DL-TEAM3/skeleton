@@ -6,12 +6,12 @@ train:
   gradient_checkpointing: false
 
   eval_strategy: "steps"
-  eval_steps: 1000
+  eval_steps: 5000
   logging_strategy: "steps"
   logging_steps: 100
   report_to: "none"
   save_strategy: "steps"
-  save_steps: 1000
+  save_steps: 5000
   save_total_limit: 5
 
   optim: "paged_adamw_8bit" # Note: for now, it is hardcoded to AdamW

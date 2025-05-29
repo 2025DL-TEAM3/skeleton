@@ -128,6 +128,7 @@ class ARCSolver:
             tokenizer_args["cache_dir"] = cache_dir
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
         self.tokenizer.bos_token_id = 151643 # Default for Qwen3
+        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
@@ -155,6 +156,9 @@ class ARCSolver:
             print("Model vocabulary optimization skipped.")
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
         self.base_model.config.eos_token_id = self.tokenizer.eos_token_id
+        print(f"eos_token_id: {self.base_model.config.eos_token_id}, pad_token_id: {self.base_model.config.pad_token_id}")
+        print(f"eos token: {self.tokenizer.eos_token}, pad token: {self.tokenizer.pad_token}")
+        print(f"padding_side: {self.tokenizer.padding_side}, truncation_side: {self.tokenizer.truncation_side}")
 
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",

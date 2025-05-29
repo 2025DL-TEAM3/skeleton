@@ -1,5 +1,5 @@
 model:
-  model_id: Qwen/Qwen3-4B
+  model_id: Qwen/Qwen3-4B-Base
   lora_rank: 16
   lora_alpha: 16
   use_custom_head: true

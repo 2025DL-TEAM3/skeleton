@@ -22,5 +22,5 @@ evaluation_dir: ${workspace}/evaluation
 
 # name of the training e.g. qwen4b-rank8
 # all artifacts from this train will be saved in ${artifacts_dir}/${artifact_name}
-artifact_name: ""
+artifact_name: "qwen4b-base-r16-a16-custom-head-architect-imported"
 
