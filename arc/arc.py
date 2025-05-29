@@ -460,7 +460,7 @@ class ARCSolver:
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
         num_augmentations: int = 8,
-        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "vote-gridwise"] = "vote-gridwise",
+        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "voted-gridwise"] = "voted-gridwise",
         **kwargs,
     ):
         """
