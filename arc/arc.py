@@ -459,8 +459,8 @@ class ARCSolver:
         checkpoint_path: str = "artifacts/checkpoint-final",
         enable_ttt: bool = False,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 10,
-        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax"] = "naive",
+        num_augmentations: int = 8,
+        grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "vote-gridwise"] = "vote-gridwise",
         **kwargs,
     ):
         """
