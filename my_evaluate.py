@@ -107,7 +107,7 @@ def main(cfg: DictConfig):
     print(OmegaConf.to_yaml(cfg))
     
     if hasattr(cfg.evaluate, "seed") and cfg.evaluate.seed is not None:
-        set_seed(cfg.evaluate.seed)
+        set_seed(int(cfg.evaluate.seed))
 
     msg.info("Loading data...")
     df = load_data(cfg.dataset_dir, num_samples=cfg.evaluate.num_samples, num_workers=cfg.evaluate.num_workers)
