@@ -143,6 +143,5 @@ def augment_for_ttt(
     
     expanded_dataset = concatenate_datasets(aug_datasets)
     expanded_dataset = expanded_dataset.shuffle()
-    print(f"Original dataset size: {len(dataset)}")
-    print(f"Expanded dataset size: {len(expanded_dataset)}")
+
     return expanded_dataset

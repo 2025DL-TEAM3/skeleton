@@ -483,7 +483,8 @@ class ARCSolver:
             num_train_epochs=1,
             save_total_limit=1,
             save_strategy="no",        
-            logging_strategy="steps",
+            # logging_strategy="steps",
+            logging_strategy="no",
             logging_steps=1,   
             eval_strategy="no", 
             report_to=[],           
@@ -515,7 +516,6 @@ class ARCSolver:
         self.peft_model.eval()
         end_time = time.time()
         msg.good(f"Test-time training completed in {end_time - start_time:.2f} seconds.")
-        msg.info(f"Test-time training finished. Model is now in eval mode.")
         
     def predict(
         self, 

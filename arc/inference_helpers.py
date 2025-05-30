@@ -205,8 +205,7 @@ class ARCInferencer:
         
         if not grid_info:
             print("No valid grids found. Returning random grid.")
-            x, y = self._infer_test_shape(candidates[0][0])
-            return np.random.randint(0, 10, (x, y))
+            return np.random.randint(0, 10, (5, 5))
         
         max_votes = max(count for count, _, _ in grid_info.values())
         top_candidates = [(count, score, grid) for grid_tuple, (count, score, grid) in grid_info.items() if count == max_votes]
