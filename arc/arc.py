@@ -47,6 +47,20 @@ class SaveModelCallback(TrainerCallback):
             print(f"✓ Saved adapter + LM Head at step {step} to {lm_head_path}")
         return control
 
+class TimeoutCallback(TrainerCallback):
+    def __init__(self, timeout_seconds: int):
+        self.timeout_seconds = timeout_seconds
+        self.start_time = None
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if time.time() - self.start_time > self.timeout_seconds:
+            print(f"Training stopped due to timeout ({self.timeout_seconds}s).")
+            control.should_training_stop = True
+        return control
+
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
     
@@ -428,10 +442,30 @@ class ARCSolver:
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
+    def get_num_repeat_from(self, examples: List[ExampleDict]) -> int:
+        total_sum_len = 0
+
+        def numel(nested_list):
+            if isinstance(nested_list, list):
+                return sum(numel(item) for item in nested_list)
+            else:
+                return 1
+            
+        for example in examples:
+            grid_in = example["input"]
+            grid_out = example["output"]
+            total_sum_len += numel(grid_in) + numel(grid_out)
+        
+        print(total_sum_len)
+
+        return 8
+
     def test_time_training(self, examples: List[ExampleDict]):
         if not self.enable_ttt: 
             print("Test-time training is not enabled. Skipping.")
             return
+        
+        num_repeat = self.get_num_repeat_from(examples)
         
         import datasets
         datasets.disable_progress_bar()
@@ -456,8 +490,8 @@ class ARCSolver:
             dataset=dataset,
             tokenizer=self.tokenizer,
             fmt_opts=self.fmt_opts,
-            num_proc=1, 
-            num_repeat=9,
+            num_proc=num_repeat, 
+            num_repeat=7,
         )
 
         # each datapoint: 9 examples / 10 datapoints
@@ -502,6 +536,7 @@ class ARCSolver:
             args=sft_training_args,
             data_collator=data_collator,
             peft_config=self.peft_config,
+            callbacks=[TimeoutCallback(timeout_seconds=37)]
         )
 
         self.peft_model = trainer.model
@@ -555,9 +590,9 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
-        enable_ttt: bool = False,
+        enable_ttt: bool = True,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 8,
+        num_augmentations: int = 1,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "voted-gridwise"] = "voted-gridwise",
         **kwargs,
     ):
