@@ -71,8 +71,8 @@ def main():
 
     set_seed(1234567890)
 
-    data_path = "/home/top321902/code/intro_dl/term_project/dataset"
-    N_data = 100
+    data_path = "/home/top321902/code/intro_dl/term_project/dataset_40"
+    N_data = 41
 
     scores = []
     df = load_data(data_path)
@@ -84,6 +84,11 @@ def main():
             eval_data["train"],
             eval_data["test"][0]["input"],
         )
+        preds_array = np.array(preds, dtype=np.uint8)
+        labels_array = np.array(eval_data["test"][0]["output"], dtype=np.uint8)
+        print(preds_array)
+        print(labels_array)
+        print()
         s = check_match(preds, eval_data["test"][0]["output"])
         scores.append(s)
     

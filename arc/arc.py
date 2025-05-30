@@ -1,4 +1,4 @@
-import os, glob, json, time, random, copy, gc, datetime, traceback
+import os, glob, json, time, random, copy, gc, datetime, traceback, tempfile
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
 import numpy as np
@@ -8,7 +8,7 @@ from transformers import GenerationConfig, TrainingArguments, EarlyStoppingCallb
 import torch
 import torch.nn.functional as F
 from typing import List, Union, Literal, Any, TypedDict, Callable, Optional
-from datasets import load_dataset, Dataset as HFDataset
+from datasets import load_dataset, Dataset as HFDataset, concatenate_datasets
 from pprint import pprint
 
 from transformers import (
@@ -259,6 +259,48 @@ class ARCSolver:
         decoded = self.tokenizer.decode(ids, skip_special_tokens=True)
         grid = arc_utils.gridify_grid(decoded)
         return grid
+    
+    def _prepare_optimizer(
+        self,
+        trainer: SFTTrainer,
+        lr: float,
+        lm_head_lr: Optional[float] = None,
+    ):
+        if self.finetune_lm_head and lm_head_lr is not None:
+            for n, p in self.peft_model.base_model.named_parameters():
+                p.requires_grad = False
+
+            lora_params = []
+            lm_head_params = []
+            for n, p in self.peft_model.named_parameters():
+                if "lora" in n.lower():
+                    p.requires_grad = True
+                    lora_params.append(p)
+                elif "lm_head" in n:
+                    p.requires_grad = True
+                    lm_head_params.append(p)
+                else:
+                    p.requires_grad = False
+                
+            optimizer_grouped_parameters = []
+            if lora_params:
+                optimizer_grouped_parameters.append({
+                    "params": lora_params,
+                    "lr": lr
+                })
+            if lm_head_params:
+                optimizer_grouped_parameters.append({
+                    "params": lm_head_params,
+                    "lr": lm_head_lr
+                })
+
+            optimizer = torch.optim.AdamW(
+                optimizer_grouped_parameters,
+                betas=(0.9, 0.999),
+                eps=1e-8,
+                weight_decay=0.0
+            )
+            trainer.optimizer = optimizer
 
     def train(
         self, 
@@ -361,41 +403,11 @@ class ARCSolver:
 
         self.peft_model = trainer.model
 
-        if self.finetune_lm_head and lm_head_lr is not None:
-            for n, p in self.peft_model.base_model.named_parameters():
-                p.requires_grad = False
-
-            lora_params = []
-            lm_head_params = []
-            for n, p in self.peft_model.named_parameters():
-                if "lora" in n.lower():
-                    p.requires_grad = True
-                    lora_params.append(p)
-                elif "lm_head" in n:
-                    p.requires_grad = True
-                    lm_head_params.append(p)
-                else:
-                    p.requires_grad = False
-                
-            optimizer_grouped_parameters = []
-            if lora_params:
-                optimizer_grouped_parameters.append({
-                    "params": lora_params,
-                    "lr": train_args_dict.pop("lora_learning_rate", sft_training_args.learning_rate)
-                })
-            if lm_head_params:
-                optimizer_grouped_parameters.append({
-                    "params": lm_head_params,
-                    "lr": lm_head_lr
-                })
-
-            optimizer = torch.optim.AdamW(
-                optimizer_grouped_parameters,
-                betas=(0.9, 0.999),
-                eps=1e-8,
-                weight_decay=0.0
-            )
-            trainer.optimizer = optimizer
+        self._prepare_optimizer(
+            trainer,
+            lr=train_args_dict.pop("lora_learning_rate", sft_training_args.learning_rate),
+            lm_head_lr=lm_head_lr,
+        )
         
         # preemptively save the model before training, to check error
         trainer.save_model(os.path.join(self.checkpoint_save_path, "checkpoint-initial"))
@@ -417,8 +429,94 @@ class ARCSolver:
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
     def test_time_training(self, examples: List[ExampleDict]):
-        pass
+        if not self.enable_ttt: 
+            print("Test-time training is not enabled. Skipping.")
+            return
+        
+        import datasets
+        datasets.disable_progress_bar()
+        # convert to train mode
+        self.peft_model.train()
+    
+        # augment examples
+        total_examples = examples
+        for _ in range(1):
+            color_aug_examples = data_augmentation.random_examples_augmentation(
+                examples=examples,
+                augmentation_names=["color"],
+            )
+            total_examples += color_aug_examples
+        random.shuffle(total_examples)
+        datapoint: DataPointDict = {
+            "train": total_examples[:-1],
+            "test": [total_examples[-1]],
+        }
+        dataset = HFDataset.from_list([datapoint])
+        dataset = data_transform.augment_for_ttt(
+            dataset=dataset,
+            tokenizer=self.tokenizer,
+            fmt_opts=self.fmt_opts,
+            num_proc=1, 
+            num_repeat=9,
+        )
 
+        # each datapoint: 9 examples / 10 datapoints
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
+        )
+
+        tmp_dir = tempfile.mkdtemp(prefix="ttt_sft_")
+
+        sft_training_args = SFTConfig(
+            output_dir=tmp_dir,
+            logging_dir=os.path.join(tmp_dir, "logs"),
+            max_length=None,  # avoid truncation
+            label_names=["labels"],  # required for custom data collators
+            dataset_text_field="text",
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=1,
+            learning_rate=5e-5,
+            num_train_epochs=1,
+            save_total_limit=1,
+            save_strategy="no",        
+            logging_strategy="steps",
+            logging_steps=1,   
+            eval_strategy="no", 
+            report_to=[],           
+            optim="paged_adamw_8bit",      
+            max_grad_norm=1.0,
+            fp16=False,
+        )
+
+        start_time = time.time()
+        msg.info("Using SFTTrainer for test-time training.")
+        trainer = SFTTrainer(
+            model=self.base_model if self.peft_model is None else self.peft_model,
+            processing_class=self.tokenizer,
+            train_dataset=dataset,
+            args=sft_training_args,
+            data_collator=data_collator,
+            peft_config=self.peft_config,
+        )
+
+        self.peft_model = trainer.model
+
+        # self._prepare_optimizer(
+        #     trainer,
+        #     lr=1e-6, 
+        #     lm_head_lr=1e-6 if self.finetune_lm_head else None,
+        # )
+
+        trainer.train()
+        self.peft_model.eval()
+        end_time = time.time()
+        msg.good(f"Test-time training completed in {end_time - start_time:.2f} seconds.")
+        msg.info(f"Test-time training finished. Model is now in eval mode.")
+        
     def predict(
         self, 
         examples: List[ExampleDict], 

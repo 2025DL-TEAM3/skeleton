@@ -162,6 +162,7 @@ def main(cfg: DictConfig):
     if scores:
         score = np.array(scores).mean() * 100  
         print(f"Evaluation scores: {score:.2f}%", flush=True)
+        print(f"Num correct predictions: {sum(scores)}")
         print(f"성공한 평가 수: {len(scores)}/{len(eval_dataset)}")
     else:
         print("오류로 인해 평가 결과가 없습니다.")

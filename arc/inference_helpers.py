@@ -285,8 +285,7 @@ class ARCInferencer:
         
         if not grid_origs:
             print("No valid grids found. Returning random grid.")
-            x, y = self._infer_test_shape(candidates[0][0]) # TODO: unmatch type. will raise error
-            return np.random.randint(0, 10, (x, y))
+            return np.random.randint(0, 10, (5, 5))
     
         # TODO: what if candidates have different shapes?
         grids_arr = np.stack(grid_origs, axis=0) # (num_candidates, h_orig, w_orig), int array
