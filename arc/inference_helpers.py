@@ -1,4 +1,5 @@
 import traceback, random
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -28,6 +29,46 @@ class ARCInferencer:
         self.device = model.device
         self.fmt_opts = fmt_opts
 
+    def _get_allowed_tokens(self):
+        digit_tokens = []
+        for i in range(10):
+            token = self.tokenizer.encode(str(i), add_special_tokens=False)[0]
+            digit_tokens.append(token)
+            
+        newline_token = self.tokenizer.encode("\n", add_special_tokens=False)[0]
+        
+        allowed_tokens = set(digit_tokens + [newline_token, self.tokenizer.eos_token_id])
+        return allowed_tokens
+
+    def print_logits(self, output, prompt_lens, scores):
+        self.allowed_tokens = self._get_allowed_tokens()
+        allowed_ids = sorted(self.allowed_tokens)
+        RED = "\033[91m"
+        BLUE = "\033[94m"
+        RESET = "\033[0m"
+        BOLD = "\033[1m"
+             
+        for i,seq in enumerate(output.sequences):
+            prompt_len = prompt_lens[i]
+            output_ids = seq[prompt_len:].cpu().tolist()
+            logits = scores[i]
+            probs = F.softmax(logits, dim=-1)    # [gen_len, vocab_size]
+        
+            print(f"\n=== 샘플 {i} === {BOLD}출력 토큰들{RESET} ===")
+            for token_idx, step_probs in enumerate(probs):
+                token_id = output_ids[token_idx]
+                decoded_token = self.tokenizer.decode([token_id])
+                decoded_token = decoded_token if decoded_token != "\n" else "sep"
+                print(f"{BLUE} Token {token_idx+1}:{RESET} {decoded_token}")
+
+                # allowed token별로 출력
+                for allowed_id in allowed_ids:
+                    token_str = self.tokenizer.decode([allowed_id])
+                    p = step_probs[allowed_id].item()
+                    color = RED if token_id == allowed_id else ""
+                    print(f"   {color}{repr(token_str)} (id={allowed_id}): {p:.4f}{RESET}", end=" ")
+                print()
+
     def parse_grid(self, ids: List[int]) -> Grid:
         return self.parse_grid_fn(ids)
 
@@ -49,6 +90,10 @@ class ARCInferencer:
         base_datapoint: DataPointDict,
         num_augmentations: int = 1,
     ) -> List[tuple[DataPointDict, dict]]:
+        if num_augmentations == 1:
+            # return without augmentation
+            return [(deepcopy(base_datapoint), {})]
+
         return [
             data_augmentation.random_datapoint_augmentation(base_datapoint, swap_train_and_test=False)
             for _ in range(num_augmentations)
@@ -103,6 +148,8 @@ class ARCInferencer:
         # output.scores: Tuples of (batch_size, vocab_size), one per generation step
         # scores: (batch_size, gen_len, vocab_size)
         scores = torch.stack(output.scores, dim=1)
+
+        # self.print_logits(output, prompt_lens, scores)
 
         results = []
         for i, seq in enumerate(output.sequences):
