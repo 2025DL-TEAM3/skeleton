@@ -8,3 +8,5 @@ artifacts/requirements.txt
 
 .env
 .venv/
+
+dataset/
