@@ -15,7 +15,7 @@ cache_dir: null
 
 # Paths based on workspace
 dataset_dir: ${workspace}/dataset
-augmented_dataset_dir: ${workspace}/augmented_dataset
+augmented_dataset_dir: ${workspace}/augmented_dataset_base
 use_cached_augmented_dataset: true
 artifacts_dir: ${workspace}/skeleton/artifacts
 evaluation_dir: ${workspace}/evaluation
