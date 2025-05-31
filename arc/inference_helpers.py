@@ -27,6 +27,18 @@ class ARCInferencer:
         self.parse_grid_fn = parse_grid_fn
         self.device = model.device
         self.fmt_opts = fmt_opts
+        self.allowed_tokens = self._get_allowed_tokens()
+
+    def _get_allowed_tokens(self):
+        digit_tokens = []
+        for i in range(10):
+            token = self.tokenizer.encode(str(i), add_special_tokens=False)[0]
+            digit_tokens.append(token)
+            
+        newline_token = self.tokenizer.encode("\n", add_special_tokens=False)[0]
+        
+        allowed_tokens = set(digit_tokens + [newline_token, self.tokenizer.eos_token_id])
+        return allowed_tokens
 
     def parse_grid(self, ids: List[int]) -> Grid:
         return self.parse_grid_fn(ids)
@@ -61,6 +73,40 @@ class ARCInferencer:
             reversed_grids.append(reversed_grid)
         return reversed_grids
 
+    def print_logits(self, output, prompt_lens, scores, batch_size, num_return_sequences):
+        allowed_ids = sorted(self.allowed_tokens)
+        RED = "\033[91m"
+        BLUE = "\033[94m"
+        RESET = "\033[0m"
+        BOLD = "\033[1m"
+        print(len(output.sequences))
+        print(len(output.sequences_scores))
+        print(batch_size)
+        
+
+        for i in range(batch_size):
+            prompt_len = prompt_lens[i]
+            for j in range(num_return_sequences):
+                seq = output.sequences[i * num_return_sequences + j]
+                output_ids = seq[prompt_len:].cpu().tolist()
+                logits = scores[i * num_return_sequences + j]
+                probs = F.softmax(logits, dim=-1)    # [gen_len, vocab_size]
+            
+                print(f"\n=== 샘플 {i} === {j+1}번째 output sequnce scores:", output.sequences_scores[i * num_return_sequences + j])
+                for token_idx, step_probs in enumerate(probs):
+                    token_id = output_ids[token_idx]
+                    decoded_token = self.tokenizer.decode([token_id])
+                    decoded_token = decoded_token if decoded_token != "\n" else "sep"
+                    print(f"{BLUE} Token {token_idx+1}:{RESET} {decoded_token}")
+
+                    # allowed token별로 출력
+                    for allowed_id in allowed_ids:
+                        token_str = self.tokenizer.decode([allowed_id])
+                        p = step_probs[allowed_id].item()
+                        color = RED if token_id == allowed_id else ""
+                        print(f"   {color}{repr(token_str)} (id={allowed_id}): {p:.4f}{RESET}", end=" ")
+                    print()
+
     def _generate(
         self, 
         batch_datapoints: List[DataPointDict], 
@@ -70,6 +116,10 @@ class ARCInferencer:
         input_end = self.fmt_opts.get("input_end", "")
         output_end = self.fmt_opts.get("output_end", "")
         preprompt = self.fmt_opts.get("preprompt", "")
+
+        batch_size = len(batch_datapoints)
+        num_return_sequences = 1  # Number of sequences to return per input
+        
         prompt_messages = [arc_utils.format_prompt_messages(dp, self.tokenizer, input_start, input_end, output_end, preprompt) for dp in batch_datapoints]
 
         model_inputs = self.tokenizer(
@@ -85,27 +135,50 @@ class ARCInferencer:
                 **model_inputs,
                 return_dict_in_generate=return_logits,
                 output_scores=return_logits,
+                num_beams=num_return_sequences,
+                num_return_sequences=num_return_sequences,
             )
-        
+    
         if not return_logits:
-            # output: (batch_size, total_seq_len)
-            return [
-                seq[prompt_lens[i]:].cpu().tolist()
-                for i, seq in enumerate(output)
-            ]
-        
-        # output.sequences: (batch_size, total_seq_len)
-        # output.scores: Tuples of (batch_size, vocab_size), one per generation step
-        # scores: (batch_size, gen_len, vocab_size)
+            # When using num_return_sequences, outputs are reshaped to (batch_size * num_return_sequences, seq_len)
+            # Reshape results to get a list of sequences for each datapoint
+            result = []
+            for i in range(batch_size):
+                # Get all sequences for this batch item
+                batch_sequences = []
+                for j in range(num_return_sequences):
+                    idx = i * num_return_sequences + j
+                    if idx < len(output):  # Safety check
+                        batch_sequences.append(output[idx][prompt_lens[i]:].cpu().tolist())
+                result.append(batch_sequences[0])
+            return result
+    
+        # output.sequences: (batch_size * num_return_sequences, total_seq_len)
+        # output.scores: Tuples of (batch_size * num_return_sequences, vocab_size), one per generation step
+        # scores: (batch_size * num_return_sequences, gen_len, vocab_size)
         scores = torch.stack(output.scores, dim=1)
 
-        results = []
-        for i, seq in enumerate(output.sequences):
-            prompt_len = prompt_lens[i]
-            output_ids = seq[prompt_len:].cpu().tolist()
-            logits = scores[i].cpu()
-            results.append((output_ids, logits))
-        return results
+        self.print_logits(output, prompt_lens, scores, batch_size, num_return_sequences)
+    
+        # Reshape results for return_logits=True case
+        result = []
+        for i in range(batch_size):
+            batch_sequences = []
+            for j in range(num_return_sequences):
+                idx = i * num_return_sequences + j
+                if idx < len(output.sequences):  # Safety check
+                    output_ids = output.sequences[idx][prompt_lens[i]:].cpu().tolist()
+                    try:
+                        parsed_grid = self.parse_grid(output_ids)
+                        grid_aug = np.array(parsed_grid)
+                        candidate = np.array(grid_aug, dtype=np.uint8)
+                        print("cand     :", candidate.tolist())
+                    except:
+                        continue
+                    
+                    batch_sequences.append(output_ids)
+            result.append(batch_sequences[0])
+        return result
     
     def _vote_select(
         self, 

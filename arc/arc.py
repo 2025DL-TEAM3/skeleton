@@ -1,4 +1,4 @@
-import os, glob, json, time, random, copy, gc, datetime, traceback
+import os, glob, json, time, random, copy, gc, datetime, traceback, tempfile
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
 import numpy as np
@@ -52,6 +52,20 @@ class SaveModelCallback(TrainerCallback):
             print(f"✓ Saved adapter + LM Head at step {step} to {path}")
         return control
 
+class TimeoutCallback(TrainerCallback):
+    def __init__(self, timeout_seconds: int):
+        self.timeout_seconds = timeout_seconds
+        self.start_time = None
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if time.time() - self.start_time > self.timeout_seconds:
+            print(f"Training stopped due to timeout ({self.timeout_seconds}s).")
+            control.should_training_stop = True
+        return control
+
 
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
@@ -70,7 +84,7 @@ class ARCSolver:
     def __init__(
         self, 
         token: str = None,
-        config_path: str = "artifacts/config.yaml",
+        config_path: str = "artifacts/jh/config.yaml",
     ):
         cfg = load_config(config_path)
         train_artifacts_dir = cfg.get("train_artifacts_dir", None)
@@ -413,8 +427,99 @@ class ARCSolver:
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
+    def restore_original_lora(self, checkpoint_path: str):
+        self.peft_model = PeftModel.from_pretrained(
+            self.base_model,
+            checkpoint_path,
+            is_trainable=self.enable_ttt,
+            adapter_name="base_adapter"
+        )
+        self.peft_model.eval()
     def test_time_training(self, examples: List[ExampleDict]):
-        pass
+        if not self.enable_ttt: 
+            print("Test-time training is not enabled. Skipping.")
+            return
+        
+        num_repeat = 8
+        
+        import datasets
+        datasets.disable_progress_bar()
+        # convert to train mode
+        self.peft_model.train()
+    
+        # augment examples
+        total_examples = examples
+        for _ in range(0):
+            color_aug_examples = data_augmentation.random_examples_augmentation(
+                examples=examples,
+                augmentation_names=["color"],
+            )
+            total_examples += color_aug_examples
+        random.shuffle(total_examples)
+        datapoint: DataPointDict = {
+            "train": total_examples[:-1],
+            "test": [total_examples[-1]],
+        }
+        dataset = HFDataset.from_list([datapoint])
+        dataset = data_transform.augment_for_ttt(
+            dataset=dataset,
+            tokenizer=self.tokenizer,
+            fmt_opts=self.fmt_opts,
+            num_proc=1, 
+            num_repeat=num_repeat,
+        )
+
+        # each datapoint: 9 examples / 10 datapoints
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
+        )
+
+        tmp_dir = tempfile.mkdtemp(prefix="ttt_sft_")
+
+        sft_training_args = SFTConfig(
+            output_dir=tmp_dir,
+            logging_dir=os.path.join(tmp_dir, "logs"),
+            max_length=None,  # avoid truncation
+            label_names=["labels"],  # required for custom data collators
+            dataset_text_field="text",
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=1,
+            learning_rate=5e-5,
+            num_train_epochs=1,
+            save_total_limit=1,
+            save_strategy="no",        
+            # logging_strategy="steps",
+            logging_strategy="no",
+            logging_steps=1,   
+            eval_strategy="no", 
+            report_to=[],           
+            optim="paged_adamw_8bit",      
+            max_grad_norm=1.0,
+            fp16=False,
+        )
+
+        start_time = time.time()
+        msg.info("Using SFTTrainer for test-time training.")
+        trainer = SFTTrainer(
+            model=self.base_model if self.peft_model is None else self.peft_model,
+            processing_class=self.tokenizer,
+            train_dataset=dataset,
+            args=sft_training_args,
+            data_collator=data_collator,
+            peft_config=self.peft_config,
+            callbacks=[TimeoutCallback(timeout_seconds=37)]
+        )
+
+        self.peft_model = trainer.model
+
+        trainer.train()
+        self.peft_model.eval()
+        end_time = time.time()
+        msg.good(f"Test-time training completed in {end_time - start_time:.2f} seconds.")
 
     def predict(
         self, 
@@ -443,19 +548,28 @@ class ARCSolver:
         )
         
         if not self.use_data_augmentation_for_generation or self.num_augmentations < 1:
-            return inferencer.predict_single(base_datapoint)
+            pred = inferencer.predict_single(base_datapoint)
+            if self.enable_ttt:
+                self.restore_original_lora(self.checkpoint_path)
+            return pred
         
-        return inferencer.predict(
+        preds = inferencer.predict(
             base_datapoint,
             num_augmentations=self.num_augmentations,
             batch_size_generation=self.batch_size_generation,
             grid_select_policy=self.grid_select_policy,
         )
+        if self.enable_ttt:
+            start_time = time.time()
+            self.restore_original_lora(self.checkpoint_path)
+            end_time = time.time()
+            msg.good(f"Restored original LoRA in {end_time - start_time:.2f} seconds.")
+        return preds
 
     def prepare_evaluation(
         self,
-        checkpoint_path: str = "artifacts/checkpoint-final",
-        enable_ttt: bool = False,
+        checkpoint_path: str = "artifacts/jh/checkpoints/checkpoint-70000",
+        enable_ttt: bool = True,
         use_data_augmentation_for_generation: bool = False,
         num_augmentations: int = 10,
         batch_size_generation: int = 5,
@@ -481,18 +595,20 @@ class ARCSolver:
             f"- grid_select_policy: {grid_select_policy}\n"
         )
         print(generation_config_msg)
+        self.checkpoint_path = checkpoint_path
         
         try:
             # Note: checkpoint config should be match with the model config used in intialization
             self.peft_model = PeftModel.from_pretrained(
                 self.base_model,
-                checkpoint_path, 
+                self.checkpoint_path, 
                 is_trainable=enable_ttt,
+                adapter_name="base_adapter"
             )
             
             # LM head 가중치 로드 시도 (finetune_lm_head가 True인 경우)
             if self.finetune_lm_head:
-                lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
+                lm_head_path = os.path.join(self.checkpoint_path, "lm_head_weights.pt")
                 if os.path.exists(lm_head_path):
                     lm_head_state = torch.load(lm_head_path, map_location=self.device)
                     
