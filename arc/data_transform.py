@@ -45,8 +45,6 @@ class RandomAugmentationTransform(DataTransform):
 
     def transform(self, datapoint: DataPointDict) -> PromptCompletionPair:
         augmented_datapoint, _ = random_datapoint_augmentation(datapoint, self.swap_train_and_test, self.augmentation_names)
-        # if random.random() < self.apply_task_augmentation_probability: # Note: padd/upscale does not help training
-        #     augmented_datapoint = random_task_augmentation(augmented_datapoint)
         input_start = self.fmt_opts.get("input_start", "")
         input_end = self.fmt_opts.get("input_end", "")
         output_end = self.fmt_opts.get("output_end", "")
