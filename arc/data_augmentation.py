@@ -56,6 +56,11 @@ def random_datapoint_augmentation(
             'train': new_test,
             'test': new_train
         })
+    else:
+        augmented_datapoint = {
+            'train': new_train,
+            'test': new_test
+        }
     return augmented_datapoint, params_map
 
 def reverse_grid_augmentation(grid: Grid, params_map: dict, augmentations_names: Optional[list[str]] = None, skip_names: Optional[list[str]] = None) -> Grid:
