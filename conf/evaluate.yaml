@@ -1,6 +1,6 @@
 evaluate:
   num_samples: 100
   visualize: false
-  # seed: 1234567890
+  seed: 1234567890
   num_workers: 4
   eval_name: ""
