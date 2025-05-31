@@ -25,7 +25,7 @@ def build_hf_train_val_dataset(
         train_file_paths, val_file_paths = json_file_paths[:split], json_file_paths[split:]
     else:
         if os.path.isdir(f"{dataset_path}_train") and os.path.isdir(f"{dataset_path}_eval"):
-            print("Using separate train and eval paths.")
+            print(f"Using separate train and eval paths: {dataset_path}_train and {dataset_path}_eval")
             train_file_paths = sorted(glob.glob(f"{dataset_path}_train/*.json"))
             val_file_paths = sorted(glob.glob(f"{dataset_path}_eval/*.json"))
         else:
