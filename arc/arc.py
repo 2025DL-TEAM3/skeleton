@@ -457,7 +457,7 @@ class ARCSolver:
         Should be called once after adapter is loaded.
         """
         self._original_lora_weights = {
-            name: param.clone().detach()
+            name: param.clone().detach().cpu()
             for name, param in self.peft_model.named_parameters()
             if param.requires_grad
         }
@@ -473,7 +473,7 @@ class ARCSolver:
         
         for name, param in self.peft_model.named_parameters():
             if name in self._original_lora_weights:
-                param.data.copy_(self._original_lora_weights[name])
+                param.data.copy_(self._original_lora_weights[name].to(param.device))
         
         msg.good("Restored original LoRA weights from cache.")
 
