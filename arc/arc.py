@@ -474,6 +474,8 @@ class ARCSolver:
         for name, param in self.peft_model.named_parameters():
             if name in self._original_lora_weights:
                 param.data.copy_(self._original_lora_weights[name])
+        
+        msg.good("Restored original LoRA weights from cache.")
 
     def test_time_training(
         self, 
