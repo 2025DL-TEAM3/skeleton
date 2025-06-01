@@ -10,6 +10,7 @@ from peft import PeftModel
 
 from . import data_augmentation, arc_utils
 from .datatypes import *
+from torch.nn.utils.rnn import pad_sequence
 
 class ARCInferencer:
     def __init__(
@@ -309,3 +310,154 @@ class ARCInferencer:
             x, y = self._infer_test_shape(base_datapoint)
             return np.random.randint(0, 10, (x, y))
         return grid_aug
+
+    def _dfs_generate(
+        self,
+        datapoint: DataPointDict,
+        indices: List[int],
+        output_ids: List[int],
+    ) -> List[List[int]]:
+        # 1) build the one‐and‐only prompt IDs
+        start, end, out_marker, pre = (
+            self.fmt_opts["input_start"],
+            self.fmt_opts["input_end"],
+            self.fmt_opts["output_end"],
+            self.fmt_opts["preprompt"],
+        )
+        prompt = arc_utils.format_prompt_messages(
+            datapoint, self.tokenizer, start, end, out_marker, pre
+        )
+        base_ids = self.tokenizer.encode(prompt, add_special_tokens=False)
+        pad_id = self.tokenizer.pad_token_id
+
+        # 2) for each split‐point, prepend the prefix
+        seq_tensors = []
+        for idx in indices:
+            seq = torch.tensor(base_ids + output_ids[:idx], device=self.device)
+            seq_tensors.append(seq)
+
+        padded = pad_sequence(
+            seq_tensors,
+            batch_first=True,
+            padding_value=pad_id,
+            padding_side="left",
+        )
+        padded_len = padded.size(1)
+        attention_mask = (padded != pad_id).long()
+
+        # 3) generate all branches in one batch
+        with torch.no_grad():
+            outs = self.model.generate(
+                input_ids=padded,
+                attention_mask=attention_mask,
+                generation_config=self.generation_config,
+                use_cache=True,
+            )
+
+        # 4) get the output_ids[:idx] + newly generated tokens
+        results = []
+        for i, idx in enumerate(indices):
+            new_tokens = outs[i][padded_len:].cpu().tolist()
+            completed_output_ids = output_ids[:idx] + new_tokens
+            results.append(completed_output_ids)
+
+        return results
+
+    def apply_grid_augmentation(self, grid: Grid, params_map: dict) -> Grid:
+        return data_augmentation.grid_augmentation(grid, params_map, list(params_map.keys()))
+
+    def _dfs_select_highest_confidence(
+        self,
+        datapoint: DataPointDict,
+        batch_output_ids: List[List[int]],
+    ) -> int:
+        scores = []
+        input_start = self.fmt_opts.get("input_start", "")
+        input_end   = self.fmt_opts.get("input_end", "")
+        output_end  = self.fmt_opts.get("output_end", "")
+        preprompt   = self.fmt_opts.get("preprompt", "")
+
+        # for each candidate sequence
+        for output_ids in batch_output_ids:
+            aug_scores = []
+
+            # parse the original grid
+            orig_grid = self.parse_grid(output_ids)
+
+            for aug_dp, params in self._augment_datapoint(datapoint, num_augmentations=4):
+                # apply grid augmentation
+                aug_grid = self.apply_grid_augmentation(orig_grid, params)
+
+                # re-tokenize
+                aug_grid_str = arc_utils.stringify_grid_output(aug_grid, end=output_end)
+                aug_ids = self.tokenizer.encode(aug_grid_str, add_special_tokens=False)
+                cand_tensor = torch.tensor(aug_ids, device=self.device).unsqueeze(0)
+
+                # build prompt for this aug_dp
+                prompt = arc_utils.format_prompt_messages(
+                    aug_dp, self.tokenizer, input_start, input_end, output_end, preprompt
+                )
+                toks = self.tokenizer(
+                    [prompt], add_special_tokens=False,
+                    return_tensors="pt", padding=True, truncation=False, # no truncation to get full scores
+                ).to(self.device)
+
+                # append the candidate
+                prompt_len = toks["input_ids"].size(1)
+                toks["input_ids"] = torch.cat([toks["input_ids"], cand_tensor], dim=1)
+                toks["attention_mask"] = torch.cat([
+                    toks["attention_mask"],
+                    torch.ones_like(cand_tensor)
+                ], dim=1)
+
+                # single forward for scoring
+                with torch.no_grad():
+                    out = self.model(
+                        input_ids      = toks["input_ids"],
+                        attention_mask = toks["attention_mask"],
+                        return_dict    = True,
+                    )
+                logits = out.logits[0]  # (total_len, vocab_size)
+                scores_tensor = logits[prompt_len : prompt_len + len(aug_ids)]
+
+                # sum log-probs
+                logp       = F.log_softmax(scores_tensor, dim=-1)
+                ids_t      = cand_tensor.squeeze(0).unsqueeze(-1)
+                token_logp = logp.gather(1, ids_t).squeeze(-1)
+                aug_scores.append(token_logp.sum().item())
+
+            # average across the 4 augmentations
+            scores.append(sum(aug_scores) / len(aug_scores))
+
+        # pick the candidate with highest average score
+        return int(max(range(len(scores)), key=lambda i: scores[i]))
+
+    def predict_dfs(
+        self,
+        base_datapoint: DataPointDict,
+    ) -> Grid:
+        output_ids, logits = self._generate([base_datapoint], return_logits=True)[0]
+        log_probs = F.log_softmax(logits, dim=-1) # (gen_len, vocab_size)
+        token_log_probs = log_probs.gather(1, torch.tensor(output_ids).unsqueeze(-1)).squeeze(-1) # (gen_len, )
+
+        indicies = []
+        for i in range(len(output_ids)):
+            if torch.exp(token_log_probs[i]) < 0.9:
+                indicies.append(i)
+                if len(indicies) >= 8:
+                    break
+
+        # select the highest confidence grid
+        if len(indicies) > 0:
+            batch_output_ids = [output_ids] + self._dfs_generate(base_datapoint, indicies, output_ids)
+            best_idx = self._dfs_select_highest_confidence(base_datapoint, batch_output_ids)
+            output_ids = batch_output_ids[best_idx]
+
+        try:
+            parsed_grid = self.parse_grid(output_ids)
+            return np.array(parsed_grid)
+        except Exception as e:
+            print("Grid parsing failed. Returning random grid.")
+            traceback.print_exc()
+            x, y = self._infer_test_shape(base_datapoint)
+            return np.random.randint(0, 10, (x, y))
