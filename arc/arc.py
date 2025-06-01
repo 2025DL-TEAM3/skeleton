@@ -233,6 +233,10 @@ class ARCSolver:
         )
         print(f"✓ Loaded LoRA weights from {checkpoint_path}")
 
+        if not self.finetune_lm_head:
+            print("Skipping LM head loading as finetune_lm_head is set to False.")
+            return
+
         lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
         if os.path.exists(lm_head_path) and self.finetune_lm_head:
             lm_head_state = torch.load(lm_head_path, map_location=self.device)
