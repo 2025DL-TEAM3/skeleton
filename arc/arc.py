@@ -131,10 +131,10 @@ class ARCSolver:
         self.tokenizer.bos_token_id = 151643 # Default for Qwen3
         if self.use_base_model:
             # Add custom pad token
-            print("Base model detected, setting custom pad token.")
+            msg.info("Base model detected, setting custom pad token.")
             self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         else:
-            print("Non-base model detected, using default pad token.")
+            msg.info("Non-base model detected, using default pad token.")
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
