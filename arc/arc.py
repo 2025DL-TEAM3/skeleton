@@ -85,6 +85,7 @@ class ARCSolver:
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
+        self.use_base_model = "base" in model_id.lower()
 
         if train_artifacts_dir is not None:
             self.train_artifacts_dir = train_artifacts_dir
@@ -128,6 +129,12 @@ class ARCSolver:
             tokenizer_args["cache_dir"] = cache_dir
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
         self.tokenizer.bos_token_id = 151643 # Default for Qwen3
+        if self.use_base_model:
+            # Add custom pad token
+            print("Base model detected, setting custom pad token.")
+            self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        else:
+            print("Non-base model detected, using default pad token.")
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
@@ -155,6 +162,9 @@ class ARCSolver:
             print("Model vocabulary optimization skipped.")
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
         self.base_model.config.eos_token_id = self.tokenizer.eos_token_id
+        print(f"eos_token_id: {self.base_model.config.eos_token_id}, pad_token_id: {self.base_model.config.pad_token_id}")
+        print(f"eos token: {self.tokenizer.eos_token}, pad token: {self.tokenizer.pad_token}")
+        print(f"padding_side: {self.tokenizer.padding_side}, truncation_side: {self.tokenizer.truncation_side}")
 
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
@@ -180,6 +190,11 @@ class ARCSolver:
         self.augmented_dataset_dir = augmented_dataset_dir
         os.makedirs(self.augmented_dataset_dir, exist_ok=True)
         self.use_cached_augmented_dataset = use_cached_augmented_dataset
+        if self.use_base_model and not "base" in self.augmented_dataset_dir.lower():
+            msg.warn(
+                "Using base model but augmented dataset directory does not contain 'base' in its name. "
+                "This may lead to confusion if you are using different models for training and inference."
+            )
         
     def save_lm_head(self, lm_head_path: str = None):
         model = self.base_model
