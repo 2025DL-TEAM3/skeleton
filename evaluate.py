@@ -7,6 +7,7 @@ from datasets import load_dataset
 import pandas as pd
 import json
 
+
 def check_match(pred, truth):
     pred = np.array(pred, dtype=np.uint8)
     truth = np.array(truth, dtype=np.uint8)
@@ -15,6 +16,7 @@ def check_match(pred, truth):
         return 0
     else:
         return int(np.all(pred == truth))
+
 
 def load_data(base_dir):
     filenames = os.listdir(base_dir)
@@ -39,24 +41,28 @@ def load_data(base_dir):
         file_name = filenames[task_idx]
 
         n_task = len(task)
-        grids_idx =  rng.choice(n_task, size=4, replace=True)
+        grids_idx = rng.choice(n_task, size=4, replace=True)
         train_grids = [task[i] for i in grids_idx[:3]]
         test_grids = [task[i] for i in grids_idx[3:]]
 
-        test_inputs = [{'input': grid['input']} for grid in test_grids]
-        test_outputs = [grid['output'] for grid in test_grids]
-        test_outputs_transformed = [{'output': grid} for grid in test_outputs]
+        test_inputs = [{"input": grid["input"]} for grid in test_grids]
+        test_outputs = [grid["output"] for grid in test_grids]
+        test_outputs_transformed = [{"output": grid} for grid in test_outputs]
         combined_tests = []
         for test_input, test_output in zip(test_inputs, test_outputs_transformed):
-            combined_tests.append({'input': test_input['input'], 'output': test_output['output']})
+            combined_tests.append(
+                {"input": test_input["input"], "output": test_output["output"]}
+            )
 
-        data.append({
-            'task': file_name,
-            'train': train_grids,
-            'test_input': test_inputs,
-            'test_output': test_outputs,
-            'test': combined_tests,
-        })
+        data.append(
+            {
+                "task": file_name,
+                "train": train_grids,
+                "test_input": test_inputs,
+                "test_output": test_outputs,
+                "test": combined_tests,
+            }
+        )
 
     df = pd.DataFrame(data)
     return df
@@ -71,13 +77,14 @@ def main():
 
     set_seed(1234567890)
 
-    data_path = "/home/student/workspace/dataset"
+    data_path = "/home/xepex/skeleton/dataset_eval100"
     N_data = 100
 
     scores = []
     df = load_data(data_path)
 
     from datasets import Dataset
+
     eval_dataset = Dataset.from_pandas(df).shuffle(42).select(range(N_data))
     for eval_data in tqdm(eval_dataset):
         preds = solver.predict(
@@ -88,7 +95,7 @@ def main():
         scores.append(s)
         print("scores:", scores, flush=True)
         print("Current score:", sum(scores), flush=True)
-    
+
     score = np.array(scores).mean() * 100
     print(f"Evaluation scores: {score:.2f}", flush=True)
     print("Evaluation Success")
