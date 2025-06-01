@@ -483,7 +483,7 @@ class ARCSolver:
         num_repeat: int = 8,
         timeout: int = 37,
         learning_rate: float = 5e-5,
-        optim: str = "paged_adam_8bit",
+        optim: str = "paged_adamw_8bit",
         max_grad_norm: float = 1.0,
         fp16: bool = True,
         logging_strategy: str = "no",
