@@ -15,3 +15,4 @@ generate:
     max_grad_norm: 1.0
     fp16: true
     logging_strategy: 'no'
+    step_timeout: 2.2

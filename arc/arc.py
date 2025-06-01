@@ -62,6 +62,20 @@ class TimeoutCallback(TrainerCallback):
             control.should_training_stop = True
         return control
 
+class StepTimeoutCallback(TrainerCallback):
+    def __init__(self, step_timeout_seconds: float):
+        self.step_timeout_seconds = step_timeout_seconds
+        self._last_step_start_time = None
+
+    def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self._last_step_start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        step_duration = time.time() - self._last_step_start_time
+        if step_duration > self.step_timeout_seconds:
+            print(f"Step {state.global_step} took {step_duration:.2f}s, exceeding the threshold of {self.step_timeout_seconds}s. Stopping training.")
+            control.should_training_stop = True
+        return control
 
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
@@ -480,13 +494,14 @@ class ARCSolver:
     def test_time_training(
         self, 
         examples: List[ExampleDict],
-        num_repeat: int = 8,
-        timeout: int = 37,
+        num_repeat: int = 5,
+        timeout: int = 35,
         learning_rate: float = 5e-5,
         optim: str = "paged_adamw_8bit",
         max_grad_norm: float = 1.0,
         fp16: bool = True,
         logging_strategy: str = "no",
+        step_timeout: float = 2.2,
     ):
         if not self.enable_ttt: 
             print("Test-time training is not enabled. Skipping.")
@@ -556,7 +571,10 @@ class ARCSolver:
             args=ttt_args,
             data_collator=data_collator,
             peft_config=self.peft_config,
-            callbacks=[TimeoutCallback(timeout_seconds=timeout)]
+            callbacks=[
+                StepTimeoutCallback(step_timeout_seconds=step_timeout),
+                TimeoutCallback(timeout_seconds=timeout)
+            ]
         )
         
         self.peft_model = trainer.model
