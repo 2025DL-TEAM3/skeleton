@@ -190,7 +190,7 @@ class ARCSolver:
         self.augmented_dataset_dir = augmented_dataset_dir
         os.makedirs(self.augmented_dataset_dir, exist_ok=True)
         self.use_cached_augmented_dataset = use_cached_augmented_dataset
-        if self.use_base_model and not "base" in self.augmented_dataset_dir.lower():
+        if self.use_base_model and "base" not in self.augmented_dataset_dir.lower():
             msg.warn(
                 "Using base model but augmented dataset directory does not contain 'base' in its name. "
                 "This may lead to confusion if you are using different models for training and inference."
