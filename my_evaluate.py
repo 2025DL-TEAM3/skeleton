@@ -129,8 +129,17 @@ def main(cfg: DictConfig):
     )
     
     eval_dataset = Dataset.from_pandas(df).shuffle(seed=42).select(range(min(cfg.evaluate.num_samples, len(df))))
+    
+    original_dataset_dir = os.path.join(cfg.workspace, "dataset")
+    original_task_ids = []
+    for json_name in os.listdir(original_dataset_dir):
+        if json_name.endswith(".json"):
+            task_id = json_name.split(".")[0]
+            original_task_ids.append(task_id)
 
     scores = []
+    original_scores = []
+    additional_scores = []
     print(f"{len(eval_dataset)}개의 샘플에 대해 평가를 시작합니다...")
     for eval_data in tqdm(eval_dataset, desc="평가 진행"):
         try:
@@ -154,6 +163,15 @@ def main(cfg: DictConfig):
             scores.append(s)
             print(f"Score: {s}")
             
+            task_id = eval_data["task"]
+            if task_id in original_task_ids:
+                print(f"Original task: {task_id}")
+                original_scores.append(s)
+            else:
+                print(f"Additional task: {task_id}")
+                additional_scores.append(s)
+            print()
+            
         except Exception as e:
             print(f"평가 중 오류 발생: {e}")
             traceback.print_exc()
@@ -163,6 +181,14 @@ def main(cfg: DictConfig):
         score = np.array(scores).mean() * 100  
         print(f"Evaluation scores: {score:.2f}%", flush=True)
         print(f"성공한 평가 수: {len(scores)}/{len(eval_dataset)}")
+        
+        original_score = np.array(original_scores).mean() * 100 if original_scores else 0.0
+        print(f"Original task scores: {original_score:.2f}% ({sum(original_scores)}/{len(original_scores)})")
+        print(f"성공한 Original task 평가 수: {len(original_scores)}/{len(eval_dataset)}")
+        
+        additional_score = np.array(additional_scores).mean() * 100 if additional_scores else 0.0
+        print(f"Additional task scores: {additional_score:.2f}% ({sum(additional_scores)}/{len(additional_scores)})")
+        print(f"성공한 Additional task 평가 수: {len(additional_scores)}/{len(eval_dataset)}")
     else:
         print("오류로 인해 평가 결과가 없습니다.")
     
