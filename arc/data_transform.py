@@ -107,3 +107,38 @@ def augment_and_expand(
     print(f"Original dataset size: {len(dataset)}")
     print(f"Expanded dataset size: {len(expanded_dataset)}")
     return expanded_dataset
+
+def augment_for_ttt(
+    dataset: HFDataset,
+    tokenizer: PreTrainedTokenizer,
+    fmt_opts: dict,
+    # augmentation_names: Optional[list[str]] = None,
+    swap_train_and_test: bool = False,
+    num_proc: int = 1,
+    num_repeat: int = 2,
+):
+    original_dataset = dataset.map(
+        DefaultFormatMessages(
+            tokenizer=tokenizer,
+            fmt_opts=fmt_opts
+        ),
+        remove_columns=dataset.column_names,
+        num_proc=num_proc,
+    )
+    
+    dataset_to_concat = [original_dataset]
+    for _ in range(num_repeat):
+        aug_dataset = dataset.map(
+            RandomAugmentationTransform(
+                tokenizer=tokenizer,
+                fmt_opts=fmt_opts,
+                augmentation_names=["geometric"],
+                swap_train_and_test=swap_train_and_test
+            ),
+            remove_columns=dataset.column_names,
+            num_proc=num_proc,
+        )
+        dataset_to_concat.append(aug_dataset)
+    
+    expanded_dataset = concatenate_datasets(dataset_to_concat).shuffle()
+    return expanded_dataset

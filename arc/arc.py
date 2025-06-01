@@ -1,4 +1,4 @@
-import os, glob, json, time, random, copy, gc, datetime, traceback
+import os, glob, json, time, random, copy, gc, datetime, traceback, tempfile
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
 import numpy as np
@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from typing import List, Union, Literal, Any, TypedDict, Callable, Optional
 from datasets import load_dataset, Dataset as HFDataset
+import datasets
 from pprint import pprint
 
 from transformers import (
@@ -46,6 +47,21 @@ class SaveModelCallback(TrainerCallback):
             self.solver.save_lm_head(lm_head_path)
             print(f"✓ Saved adapter + LM Head at step {step} to {lm_head_path}")
         return control
+
+class TimeoutCallback(TrainerCallback):
+    def __init__(self, timeout_seconds: int):
+        self.timeout_seconds = timeout_seconds
+        self.start_time = None
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if time.time() - self.start_time > self.timeout_seconds:
+            print(f"Training stopped due to timeout ({self.timeout_seconds}s).")
+            control.should_training_stop = True
+        return control
+
 
 def load_config(config_path: str) -> DictConfig:
     cfg = OmegaConf.load(config_path)
@@ -435,8 +451,117 @@ class ARCSolver:
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
-    def test_time_training(self, examples: List[ExampleDict]):
-        pass
+    def _cache_original_lora_weights(self):
+        """
+        Cache a copy of the original LoRA adapter's trainable parameters in memory.
+        Should be called once after adapter is loaded.
+        """
+        self._original_lora_weights = {
+            name: param.clone().detach()
+            for name, param in self.peft_model.named_parameters()
+            if param.requires_grad
+        }
+        print(f"Cached {len(self._original_lora_weights)} trainable parameters for restoration.")
+
+    def restore_original_lora(self, checkpoint_path: str = None):
+        if not hasattr(self, "_original_lora_weights"):
+            msg.warn(
+                "Original LoRA weights not cached. Call _cache_original_lora_weights() after loading adapter."
+                " This will not restore original weights."
+            )
+            return
+        
+        for name, param in self.peft_model.named_parameters():
+            if name in self._original_lora_weights:
+                param.data.copy_(self._original_lora_weights[name])
+
+    def test_time_training(
+        self, 
+        examples: List[ExampleDict],
+        num_repeat: int = 8,
+        timeout: int = 37,
+        learning_rate: float = 5e-5,
+        optim: str = "paged_adam_8bit",
+        max_grad_norm: float = 1.0,
+        fp16: bool = True,
+        logging_strategy: str = "no",
+    ):
+        if not self.enable_ttt: 
+            print("Test-time training is not enabled. Skipping.")
+            return
+        
+        ttt_args_msg = (
+            f"--------------- Test-Time Training Config ---------------\n"
+            f"- num_repeat: {num_repeat}\n"
+            f"- timeout: {timeout} seconds\n"
+            f"- learning_rate: {learning_rate}\n"
+            f"- optim: {optim}\n"
+            f"- max_grad_norm: {max_grad_norm}\n"
+            f"- fp16: {fp16}\n"
+            f"- logging_strategy: {logging_strategy}\n"
+        )
+        print(ttt_args_msg)
+                
+        datasets.disable_progress_bars()
+        self.peft_model.train()
+        
+        # TODO: expand with color permutation?
+        dataset = arc_utils.create_n_minus_1_dataset(examples)
+        dataset = data_transform.augment_for_ttt(
+            dataset=dataset,
+            tokenizer=self.tokenizer,
+            fmt_opts=self.fmt_opts,
+            swap_train_and_test=False, # Already contains all possible train/test pairs
+            num_repeat=num_repeat,
+            num_proc=1,
+        )
+        
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
+        )
+        
+        tmp_dir = tempfile.mkdtemp(prefix="ttt_sft_")
+        ttt_args = SFTConfig(
+            output_dir=tmp_dir,
+            logging_dir=os.path.join(tmp_dir, "logs"),
+            max_length=None,
+            label_names=["labels"],
+            dataset_text_field="text",
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=1,
+            learning_rate=learning_rate,
+            num_train_epochs=1,
+            save_strategy="no",
+            logging_strategy=logging_strategy,
+            logging_steps=1,
+            eval_strategy="no",
+            report_to=[],
+            optim=optim,
+            max_grad_norm=max_grad_norm,
+            fp16=fp16,
+        )
+        
+        start_time = time.time()
+        msg.info("Using SFTTrainer for test-time training.")
+        trainer = SFTTrainer(
+            model=self.peft_model,
+            processing_class=self.tokenizer,
+            train_dataset=dataset,
+            args=ttt_args,
+            data_collator=data_collator,
+            peft_config=self.peft_config,
+            callbacks=[TimeoutCallback(timeout_seconds=timeout)]
+        )
+        
+        self.peft_model = trainer.model
+        trainer.train()
+        self.peft_model.eval()
+        end_time = time.time()
+        msg.good(f"Test-time training completed in {end_time - start_time:.2f} seconds.")
 
     def predict(
         self, 
@@ -444,7 +569,21 @@ class ARCSolver:
         questions_input: Grid
     ) -> Grid:
         if self.enable_ttt:
-            self.test_time_training(examples)
+            try:
+                self.restore_original_lora(self.checkpoint_path)
+            except Exception as e:
+                print(f"Error restoring original LoRA weights: {e}")
+            
+            try:
+                if hasattr(self, "ttt_kwargs") and self.ttt_kwargs:
+                    self.test_time_training(examples, **self.ttt_kwargs)
+                else:
+                    self.test_time_training(examples)
+            except Exception as e:
+                print(f"Error during test-time training: {e}")
+                torch.cuda.empty_cache()
+                gc.collect()
+                self.peft_model.eval()
         
         base_datapoint = {
             "train": examples,
@@ -476,10 +615,11 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
-        enable_ttt: bool = False,
+        enable_ttt: bool = True,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 8,
+        num_augmentations: int = 5,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "voted-gridwise"] = "voted-gridwise",
+        ttt_kwargs: dict = None,
         **kwargs,
     ):
         """
@@ -489,6 +629,8 @@ class ARCSolver:
         self.use_data_augmentation_for_generation = use_data_augmentation_for_generation
         self.num_augmentations = num_augmentations
         self.grid_select_policy = grid_select_policy
+        self.checkpoint_path = checkpoint_path
+        self.ttt_kwargs = ttt_kwargs
 
         generation_config_msg = (
             f"--------------- Generation Config ---------------\n"
@@ -513,6 +655,7 @@ class ARCSolver:
 
             print("Loaded LoRA adapter and tokenizer from checkpoint.")
             self.peft_model.eval()
+            self._cache_original_lora_weights()
         except Exception as e:
             print(f"No LoRA adapter found or incompatible: {e}")
             traceback.print_exc()

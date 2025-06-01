@@ -200,7 +200,7 @@ def is_peft_checkpoint_path(checkpoint_path: str) -> bool:
     """
     return os.path.isfile(os.path.join(checkpoint_path, "adapter_config.json"))
 
-def create_n_minus_1_dataset(examples: List[ExampleDict]) -> List[DataPointDict]:
+def create_n_minus_1_dataset(examples: List[ExampleDict]) -> HFDataset:
     new_dataset = []
     for i in range(len(examples)):
         new_example = {
@@ -208,6 +208,7 @@ def create_n_minus_1_dataset(examples: List[ExampleDict]) -> List[DataPointDict]
             "test": [examples[i]],
         }
         new_dataset.append(new_example)
+    new_dataset = HFDataset.from_list(new_dataset)
     return new_dataset
 
 def print_grid(grid: Grid):

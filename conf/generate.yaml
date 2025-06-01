@@ -6,3 +6,12 @@ generate:
   use_data_augmentation_for_generation: true
   num_augmentations: 8
   grid_select_policy: voted-gridwise # naive, grid-wise, cell-wise-argmax, voted-gridwise
+
+  ttt_kwargs:
+    num_repeat: 8
+    timeout: 37
+    learning_rate: 5e-5
+    optim: paged_adamw_8bit
+    max_grad_norm: 1.0
+    fp16: true
+    logging_strategy: 'no'
