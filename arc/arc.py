@@ -1,4 +1,4 @@
-import os, glob, json, time, random, copy, gc, datetime, traceback
+import os, glob, json, time, random, copy, gc, datetime, traceback, tempfile
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
 import numpy as np
@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from typing import List, Union, Literal, Any, TypedDict, Callable, Optional
 from datasets import load_dataset, Dataset as HFDataset
+import datasets
 from pprint import pprint
 
 from transformers import (
@@ -45,6 +46,35 @@ class SaveModelCallback(TrainerCallback):
             lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
             self.solver.save_lm_head(lm_head_path)
             print(f"✓ Saved adapter + LM Head at step {step} to {lm_head_path}")
+        return control
+
+class TimeoutCallback(TrainerCallback):
+    def __init__(self, timeout_seconds: int):
+        self.timeout_seconds = timeout_seconds
+        self.start_time = None
+
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self.start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if time.time() - self.start_time > self.timeout_seconds:
+            print(f"Training stopped due to timeout ({self.timeout_seconds}s).")
+            control.should_training_stop = True
+        return control
+
+class StepTimeoutCallback(TrainerCallback):
+    def __init__(self, step_timeout_seconds: float):
+        self.step_timeout_seconds = step_timeout_seconds
+        self._last_step_start_time = None
+
+    def on_step_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        self._last_step_start_time = time.time()
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        step_duration = time.time() - self._last_step_start_time
+        if step_duration > self.step_timeout_seconds:
+            print(f"Step {state.global_step} took {step_duration:.2f}s, exceeding the threshold of {self.step_timeout_seconds}s. Stopping training.")
+            control.should_training_stop = True
         return control
 
 def load_config(config_path: str) -> DictConfig:
@@ -85,6 +115,7 @@ class ARCSolver:
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model_id = model_id
+        self.use_base_model = "base" in model_id.lower()
 
         if train_artifacts_dir is not None:
             self.train_artifacts_dir = train_artifacts_dir
@@ -128,6 +159,12 @@ class ARCSolver:
             tokenizer_args["cache_dir"] = cache_dir
         self.tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(**tokenizer_args)
         self.tokenizer.bos_token_id = 151643 # Default for Qwen3
+        if self.use_base_model:
+            # Add custom pad token
+            msg.info("Base model detected, setting custom pad token.")
+            self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        else:
+            msg.info("Non-base model detected, using default pad token.")
         
         self.base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
             **self.model_args,
@@ -155,6 +192,9 @@ class ARCSolver:
             print("Model vocabulary optimization skipped.")
         self.base_model.config.pad_token_id = self.tokenizer.pad_token_id
         self.base_model.config.eos_token_id = self.tokenizer.eos_token_id
+        print(f"eos_token_id: {self.base_model.config.eos_token_id}, pad_token_id: {self.base_model.config.pad_token_id}")
+        print(f"eos token: {self.tokenizer.eos_token}, pad token: {self.tokenizer.pad_token}")
+        print(f"padding_side: {self.tokenizer.padding_side}, truncation_side: {self.tokenizer.truncation_side}")
 
         self.peft_config = LoraConfig(
             task_type="CAUSAL_LM",
@@ -180,6 +220,11 @@ class ARCSolver:
         self.augmented_dataset_dir = augmented_dataset_dir
         os.makedirs(self.augmented_dataset_dir, exist_ok=True)
         self.use_cached_augmented_dataset = use_cached_augmented_dataset
+        if self.use_base_model and "base" not in self.augmented_dataset_dir.lower():
+            msg.warn(
+                "Using base model but augmented dataset directory does not contain 'base' in its name. "
+                "This may lead to confusion if you are using different models for training and inference."
+            )
         
     def save_lm_head(self, lm_head_path: str = None):
         model = self.base_model
@@ -217,6 +262,10 @@ class ARCSolver:
             is_trainable=self.enable_ttt
         )
         print(f"✓ Loaded LoRA weights from {checkpoint_path}")
+
+        if not self.finetune_lm_head:
+            print("Skipping LM head loading as finetune_lm_head is set to False.")
+            return
 
         lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
         if os.path.exists(lm_head_path) and self.finetune_lm_head:
@@ -416,8 +465,123 @@ class ARCSolver:
         msg.good(f"Training completed in {end_time - start_time:.2f} seconds.")
         msg.info(f"Best checkpoint was {trainer.state.best_model_checkpoint}")
 
-    def test_time_training(self, examples: List[ExampleDict]):
-        pass
+    def _cache_original_lora_weights(self):
+        """
+        Cache a copy of the original LoRA adapter's trainable parameters in memory.
+        Should be called once after adapter is loaded.
+        """
+        self._original_lora_weights = {
+            name: param.clone().detach().cpu()
+            for name, param in self.peft_model.named_parameters()
+            if param.requires_grad
+        }
+        print(f"Cached {len(self._original_lora_weights)} trainable parameters for restoration.")
+
+    def restore_original_lora(self, checkpoint_path: str = None):
+        if not hasattr(self, "_original_lora_weights"):
+            msg.warn(
+                "Original LoRA weights not cached. Call _cache_original_lora_weights() after loading adapter."
+                " This will not restore original weights."
+            )
+            return
+        
+        for name, param in self.peft_model.named_parameters():
+            if name in self._original_lora_weights:
+                param.data.copy_(self._original_lora_weights[name].to(param.device))
+        
+        msg.good("Restored original LoRA weights from cache.")
+
+    def test_time_training(
+        self, 
+        examples: List[ExampleDict],
+        num_repeat: int = 5,
+        timeout: int = 35,
+        learning_rate: float = 5e-5,
+        optim: str = "paged_adamw_8bit",
+        max_grad_norm: float = 1.0,
+        fp16: bool = True,
+        logging_strategy: str = "no",
+        step_timeout: float = 2.2,
+    ):
+        if not self.enable_ttt: 
+            print("Test-time training is not enabled. Skipping.")
+            return
+        
+        ttt_args_msg = (
+            f"--------------- Test-Time Training Config ---------------\n"
+            f"- num_repeat: {num_repeat}\n"
+            f"- timeout: {timeout} seconds\n"
+            f"- learning_rate: {learning_rate}\n"
+            f"- optim: {optim}\n"
+            f"- max_grad_norm: {max_grad_norm}\n"
+            f"- fp16: {fp16}\n"
+            f"- logging_strategy: {logging_strategy}\n"
+        )
+        print(ttt_args_msg)
+                
+        datasets.disable_progress_bars()
+        self.peft_model.train()
+        
+        # TODO: expand with color permutation?
+        dataset = arc_utils.create_n_minus_1_dataset(examples)
+        dataset = data_transform.augment_for_ttt(
+            dataset=dataset,
+            tokenizer=self.tokenizer,
+            fmt_opts=self.fmt_opts,
+            swap_train_and_test=False, # Already contains all possible train/test pairs
+            num_repeat=num_repeat,
+            num_proc=1,
+        )
+        
+        data_collator = InputMaskingDataCollator(
+            instruction_template=self.fmt_opts["input_start"],
+            response_template=self.fmt_opts["input_end"],
+            mlm=False,
+            tokenizer=self.tokenizer,
+            mask_first_n_examples=1,
+        )
+        
+        tmp_dir = tempfile.mkdtemp(prefix="ttt_sft_")
+        ttt_args = SFTConfig(
+            output_dir=tmp_dir,
+            logging_dir=os.path.join(tmp_dir, "logs"),
+            max_length=None,
+            label_names=["labels"],
+            dataset_text_field="text",
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=1,
+            learning_rate=learning_rate,
+            num_train_epochs=1,
+            save_strategy="no",
+            logging_strategy=logging_strategy,
+            logging_steps=1,
+            eval_strategy="no",
+            report_to=[],
+            optim=optim,
+            max_grad_norm=max_grad_norm,
+            fp16=fp16,
+        )
+        
+        start_time = time.time()
+        msg.info("Using SFTTrainer for test-time training.")
+        trainer = SFTTrainer(
+            model=self.peft_model,
+            processing_class=self.tokenizer,
+            train_dataset=dataset,
+            args=ttt_args,
+            data_collator=data_collator,
+            peft_config=self.peft_config,
+            callbacks=[
+                StepTimeoutCallback(step_timeout_seconds=step_timeout),
+                TimeoutCallback(timeout_seconds=timeout)
+            ]
+        )
+        
+        self.peft_model = trainer.model
+        trainer.train()
+        self.peft_model.eval()
+        end_time = time.time()
+        msg.good(f"Test-time training completed in {end_time - start_time:.2f} seconds.")
 
     def predict(
         self, 
@@ -425,7 +589,21 @@ class ARCSolver:
         questions_input: Grid
     ) -> Grid:
         if self.enable_ttt:
-            self.test_time_training(examples)
+            try:
+                self.restore_original_lora(self.checkpoint_path)
+            except Exception as e:
+                print(f"Error restoring original LoRA weights: {e}")
+            
+            try:
+                if hasattr(self, "ttt_kwargs") and self.ttt_kwargs:
+                    self.test_time_training(examples, **self.ttt_kwargs)
+                else:
+                    self.test_time_training(examples)
+            except Exception as e:
+                print(f"Error during test-time training: {e}")
+                torch.cuda.empty_cache()
+                gc.collect()
+                self.peft_model.eval()
         
         base_datapoint = {
             "train": examples,
@@ -457,10 +635,11 @@ class ARCSolver:
     def prepare_evaluation(
         self,
         checkpoint_path: str = "artifacts/checkpoint-final",
-        enable_ttt: bool = False,
+        enable_ttt: bool = True,
         use_data_augmentation_for_generation: bool = True,
-        num_augmentations: int = 8,
+        num_augmentations: int = 5,
         grid_select_policy: Literal["naive", "grid-wise", "cell-wise-argmax", "voted-gridwise"] = "voted-gridwise",
+        ttt_kwargs: dict = None,
         **kwargs,
     ):
         """
@@ -470,6 +649,8 @@ class ARCSolver:
         self.use_data_augmentation_for_generation = use_data_augmentation_for_generation
         self.num_augmentations = num_augmentations
         self.grid_select_policy = grid_select_policy
+        self.checkpoint_path = checkpoint_path
+        self.ttt_kwargs = ttt_kwargs
 
         generation_config_msg = (
             f"--------------- Generation Config ---------------\n"
@@ -494,6 +675,7 @@ class ARCSolver:
 
             print("Loaded LoRA adapter and tokenizer from checkpoint.")
             self.peft_model.eval()
+            self._cache_original_lora_weights()
         except Exception as e:
             print(f"No LoRA adapter found or incompatible: {e}")
             traceback.print_exc()

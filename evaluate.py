@@ -1,3 +1,4 @@
+import time
 import numpy as np
 from tqdm.auto import tqdm
 import os
@@ -80,12 +81,15 @@ def main():
     from datasets import Dataset
     eval_dataset = Dataset.from_pandas(df).shuffle(42).select(range(N_data))
     for eval_data in tqdm(eval_dataset):
+        start_time = time.time()
         preds = solver.predict(
             eval_data["train"],
             eval_data["test"][0]["input"],
         )
         s = check_match(preds, eval_data["test"][0]["output"])
         scores.append(s)
+        end_time = time.time()
+        print(f"Elapsed E2E time: {end_time - start_time:.2f} seconds", flush=True)
     
     score = np.array(scores).mean() * 100
     print(f"Evaluation scores: {score:.2f}", flush=True)
