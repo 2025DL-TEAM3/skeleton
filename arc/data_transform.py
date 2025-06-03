@@ -61,6 +61,19 @@ def augment_and_expand(
 ):
     if augmentation_names is None:
         augmentation_names = ["geometric", "color"]
+        
+    dataset_to_concat = []
+    
+    original_dataset = dataset.map(
+        DefaultFormatMessages(
+            tokenizer=tokenizer,
+            fmt_opts=fmt_opts
+        ),
+        remove_columns=dataset.column_names,
+        num_proc=num_proc,
+        desc="Original dataset formatting"
+    )
+    dataset_to_concat.append(original_dataset)
     
     # geometric augmentation
     geometrically_augmented_dataset = dataset.map(
@@ -74,32 +87,24 @@ def augment_and_expand(
         num_proc=num_proc,
         desc="Geometric augmentation"
     )
+    dataset_to_concat.append(geometrically_augmented_dataset)
     
     # color augmentation
-    color_permuted_dataset = dataset.map(
-        RandomAugmentationTransform(
-            tokenizer=tokenizer,
-            fmt_opts=fmt_opts,
-            augmentation_names=["color"],
-            swap_train_and_test=swap_train_and_test
-        ),
-        remove_columns=dataset.column_names,
-        num_proc=num_proc,
-        desc="Color augmentation"
-    )
-    
-    original_dataset = dataset.map(
-        DefaultFormatMessages(
-            tokenizer=tokenizer,
-            fmt_opts=fmt_opts
-        ),
-        remove_columns=dataset.column_names,
-        num_proc=num_proc,
-        desc="Original dataset formatting"
-    )
+    # color_permuted_dataset = dataset.map(
+    #     RandomAugmentationTransform(
+    #         tokenizer=tokenizer,
+    #         fmt_opts=fmt_opts,
+    #         augmentation_names=["color"],
+    #         swap_train_and_test=swap_train_and_test
+    #     ),
+    #     remove_columns=dataset.column_names,
+    #     num_proc=num_proc,
+    #     desc="Color augmentation"
+    # )
+    # dataset_to_concat.append(color_permuted_dataset)
     
     # combine original, geometric, and color augmented datasets
-    expanded_dataset = concatenate_datasets([original_dataset, geometrically_augmented_dataset, color_permuted_dataset])
+    expanded_dataset = concatenate_datasets(dataset_to_concat)
     
     # shuffle the dataset
     expanded_dataset = expanded_dataset.shuffle()

@@ -43,3 +43,38 @@ if all_valid:
     print("✅ All files are valid.")
 else:
     print("❌ Some files are invalid.")
+
+
+eval_dataset = "../dataset_eval100"
+eval_task_ids = []
+for json_name in os.listdir(eval_dataset):
+    if json_name.endswith(".json"):
+        task_id = json_name.split(".")[0]
+        eval_task_ids.append(task_id)
+
+original_dataset_dir = "../dataset"
+original_task_ids = []
+for json_name in os.listdir(original_dataset_dir):
+    if json_name.endswith(".json"):
+        task_id = json_name.split(".")[0]
+        original_task_ids.append(task_id)
+
+additional_dataset_dir = "../dataset_40"
+additional_task_ids = []
+for json_name in os.listdir(additional_dataset_dir):
+    if json_name.endswith(".json"):
+        task_id = json_name.split(".")[0]
+        additional_task_ids.append(task_id)
+        
+print(f"Total eval tasks: {len(eval_task_ids)}")
+print(f"Total original tasks: {len(original_task_ids)}")
+print(f"Total additional tasks: {len(additional_task_ids)}")
+
+print(f"{'Original tasks in eval: ' + str(len(set(eval_task_ids) & set(original_task_ids)))}")
+print(f"{'Additional tasks in eval: ' + str(len(set(eval_task_ids) & set(additional_task_ids)))}")
+
+num_original_in_eval = 0
+for task_id in eval_task_ids:
+    if task_id in original_task_ids:
+        num_original_in_eval += 1
+print(f"Number of original tasks in eval: {num_original_in_eval}")
