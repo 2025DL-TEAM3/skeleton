@@ -211,7 +211,10 @@ class ARCSolver:
         
         self.generation_config = GenerationConfig(
             max_new_tokens=150,
-            do_sample=False,   
+            do_sample=True,
+            temparature=0.5,
+            top_p=0.8,
+            top_k=20,   
             eos_token_id=self.tokenizer.eos_token_id,
             pad_token_id=self.tokenizer.pad_token_id,
         )
@@ -501,14 +504,14 @@ class ARCSolver:
     def test_time_training(
         self, 
         examples: List[ExampleDict],
-        num_repeat: int = 5,
+        num_repeat: int = 4,
         timeout: int = 35,
         learning_rate: float = 5e-5,
         optim: str = "paged_adamw_8bit",
         max_grad_norm: float = 1.0,
         fp16: bool = True,
         logging_strategy: str = "no",
-        step_timeout: float = 2.2,
+        step_timeout: float = 2.0,
     ):
         if not self.enable_ttt: 
             print("Test-time training is not enabled. Skipping.")
@@ -523,6 +526,7 @@ class ARCSolver:
             f"- max_grad_norm: {max_grad_norm}\n"
             f"- fp16: {fp16}\n"
             f"- logging_strategy: {logging_strategy}\n"
+            f"- step_timeout: {step_timeout} seconds\n"
         )
         print(ttt_args_msg)
                 
