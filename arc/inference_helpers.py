@@ -90,14 +90,7 @@ class ARCInferencer:
         base_datapoint: DataPointDict,
         num_augmentations: int = 1,
     ) -> List[tuple[DataPointDict, dict]]:
-        if num_augmentations == 1:
-            # return without augmentation
-            return [(deepcopy(base_datapoint), {})]
-
-        return [
-            data_augmentation.random_datapoint_augmentation(base_datapoint, swap_train_and_test=False)
-            for _ in range(num_augmentations)
-        ]
+        return data_augmentation.random_datapoint_geometric_augmentation_list(base_datapoint, num_augmentations)
     
     def _reverse_grids(self, grids: List[Grid], params_maps: List[dict]) -> List[Grid]:
         reversed_grids = []

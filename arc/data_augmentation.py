@@ -1,4 +1,4 @@
-### Copied from https://github.com/ironbar/arc24/blob/main/scripts/arc24/data_augmentation.py
+import itertools
 from pprint import pprint
 from copy import deepcopy
 import random
@@ -62,6 +62,32 @@ def random_datapoint_augmentation(
             'test': new_test
         }
     return augmented_datapoint, params_map
+
+def random_datapoint_geometric_augmentation_list(datapoint: DataPointDict, size: int, keep_base:bool = True) -> list[tuple[DataPointDict, dict]]:
+    assert size <= 8
+    all_cases = [
+        {"hflip": h, "n_rotations_90": r}
+        for h, r in itertools.product([True, False], range(4))
+    ]
+    if keep_base:
+        all_cases.remove({"hflip": False, "n_rotations_90": 0})
+    n = size-1
+    sampled = random.sample(all_cases, n)
+    sampled = [{"hflip": False, "n_rotations_90": 0}, *sampled]
+    return_list = []
+    for case in sampled:
+        params_map = dict()
+        params_map["geometric"] = (geometric_augmentation, case)
+        augment_fn = partial(grid_augmentation, params_map=params_map, augmentations_names=["geometric"])
+
+        new_train = [_augment_example_dict(example, augment_fn) for example in datapoint['train']]
+        new_test = [_augment_example_dict(example, augment_fn) for example in datapoint['test']]
+        augmented_datapoint = {
+            'train': new_train,
+            'test': new_test
+        }
+        return_list.append((augmented_datapoint, params_map))
+    return return_list
 
 def reverse_grid_augmentation(grid: Grid, params_map: dict, augmentations_names: Optional[list[str]] = None, skip_names: Optional[list[str]] = None) -> Grid:
     if augmentations_names is None:
