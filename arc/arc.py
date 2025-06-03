@@ -269,7 +269,14 @@ class ARCSolver:
 
         lm_head_path = os.path.join(checkpoint_path, "lm_head_weights.pt")
         if os.path.exists(lm_head_path) and self.finetune_lm_head:
-            lm_head_state = torch.load(lm_head_path, map_location=self.device)
+            raw_lm_head_state = torch.load(lm_head_path, map_location=self.device)
+            
+            lm_head_state = {}
+            for k, v in raw_lm_head_state.items():
+                if k == "lm_head.weight":
+                    lm_head_state["model.lm_head.weight"] = v
+                else:
+                    lm_head_state[k] = v
             
             base_model = self.peft_model.base_model
             
