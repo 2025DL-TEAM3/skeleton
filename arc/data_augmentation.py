@@ -5,6 +5,7 @@ import random
 import numpy as np
 from typing import Literal, Callable, Optional, List
 from functools import partial
+import itertools
 
 from .datatypes import *
 
@@ -31,6 +32,28 @@ def grid_augmentation(grid: Grid, params_map: dict, augmentations_names: list[st
         func, kwargs = params_map[aug_name]
         grid = func(grid, **kwargs)
     return grid
+
+def random_datapoint_geometric_augmentation_list(datapoint: DataPointDict, size: int, keep_base:bool = True) -> list[tuple[DataPointDict, dict]]:
+    assert size <= 8
+    all_cases = [
+        {"hflip": h, "n_rotations_90": r}
+        for h, r in itertools.product([True, False], range(4))
+    ]
+    if keep_base:
+        all_cases.remove({"hflip": False, "n_rotations_90": 0})
+    n = size-1
+    sampled = random.sample(all_cases, n)
+    sampled = [{"hflip": False, "n_rotations_90": 0}, *sampled]
+    return_list = []
+    for case in sampled:
+        params_map = dict()
+        params_map["geometric"] = (geometric_augmentation, case)
+        augment_fn = partial(grid_augmentation, params_map=params_map, augmentations_names=["geometric"])
+        augmented_datapoint = deepcopy(datapoint)
+        augmented_datapoint['train'] = [_augment_example_dict(example, augment_fn) for example in datapoint['train']]
+        augmented_datapoint['test'] = [_augment_example_dict(example, augment_fn) for example in datapoint['test']]
+        return_list.append((augmented_datapoint, params_map))
+    return return_list
 
 def random_datapoint_augmentation(
     datapoint: DataPointDict, 

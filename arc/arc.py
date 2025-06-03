@@ -1,4 +1,11 @@
 import os, glob, json, time, random, copy, gc, datetime, traceback, tempfile
+os.environ["HF_HOME"]            = "/2025pdp/.cache"
+os.environ["TRANSFORMERS_CACHE"] = "/2025pdp/.cache"
+os.environ["HF_DATASETS_CACHE"]  = "/2025pdp/.cache/huggingface/datasets"
+os.environ["HF_METRICS_CACHE"]   = "/2025pdp/.cache/huggingface/metrics"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "true"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "true"
+os.environ["HF_HUB_DISABLE_EXPERIMENTAL_WARNING"] = "true"
 from wasabi import msg
 from omegaconf import DictConfig, OmegaConf
 import numpy as np
@@ -277,6 +284,15 @@ class ARCSolver:
             unexpected_keys = []
             error_msgs = []
 
+            # 키 이름 수정: lm_head.weight -> model.lm_head.weight
+            new_lm_head_state = {}
+            for k, v in lm_head_state.items():
+                if k == "lm_head.weight":
+                    new_lm_head_state["model.lm_head.weight"] = v
+                else:
+                    new_lm_head_state[k] = v
+            lm_head_state = new_lm_head_state
+
             for name, param in base_model.named_parameters():
                 if name in lm_head_state:
                     if param.shape != lm_head_state[name].shape:
@@ -522,14 +538,28 @@ class ARCSolver:
         datasets.disable_progress_bars()
         self.peft_model.train()
         
-        # TODO: expand with color permutation?
-        dataset = arc_utils.create_n_minus_1_dataset(examples)
-        dataset = data_transform.augment_for_ttt(
-            dataset=dataset,
-            tokenizer=self.tokenizer,
-            fmt_opts=self.fmt_opts,
-            swap_train_and_test=False, # Already contains all possible train/test pairs
-            num_repeat=num_repeat,
+        total_datapoint_list = []
+        examples_copy = examples.copy()
+        for _ in range(len(examples)):
+            examples_copy = [examples_copy[-1]]+examples_copy[:-1]
+            datapoint: DataPointDict = {
+                "train": examples_copy[:-1],
+                "test": [examples_copy[-1]],
+            }
+            total_datapoint_list.append(datapoint)
+
+        total_dataset = []
+        for datapoint in total_datapoint_list:
+            augment_list = data_augmentation.random_datapoint_geometric_augmentation_list(datapoint, num_repeat)
+            total_dataset += [augmented_datapoint for augmented_datapoint, _ in augment_list]
+        random.shuffle(total_dataset)
+        dataset = HFDataset.from_list(total_dataset)
+        ttt_dataset = dataset.map(
+            data_transform.DefaultFormatMessages(
+                tokenizer=self.tokenizer,
+                fmt_opts=self.fmt_opts,
+            ),
+            remove_columns=dataset.column_names,
             num_proc=1,
         )
         

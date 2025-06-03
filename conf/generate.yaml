@@ -1,10 +1,10 @@
 generate:
-  checkpoint_path: ${artifacts_dir}/checkpoint-final
-  config_path: ${artifacts_dir}/config.yaml
+  checkpoint_path: ${artifacts_dir}/qwen4b-test-3/checkpoints/checkpoint-50000
+  config_path: ${artifacts_dir}/qwen4b-test-3/config.yaml
   
   enable_ttt: false
   use_data_augmentation_for_generation: true
-  num_augmentations: 8
+  num_augmentations: 6
   grid_select_policy: voted-gridwise # naive, grid-wise, cell-wise-argmax, voted-gridwise
 
   ttt_kwargs:
