@@ -162,6 +162,7 @@ def main(cfg: DictConfig):
             s = check_match(preds, eval_data["test"][0]["output"])  
             scores.append(s)
             print(f"Score: {s}")
+            print(f"Accumulated scores: {sum(scores)}/{len(scores)}")
             
             task_id = eval_data["task"]
             if task_id in original_task_ids:
